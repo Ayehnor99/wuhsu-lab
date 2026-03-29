@@ -265,6 +265,25 @@ async def upload_rag_document(file: UploadFile = File(...)):
             os.remove(file_location)
         return {"status": "error", "message": str(e)}
 
+import aiosqlite
+
+@app.get("/api/dashboard-stats")
+async def api_dashboard_stats():
+    """Fetch live statistics from the local SQLite history DB for the Dashboard UI."""
+    db_path = os.path.join(_base_dir, ".wuhsu_history.db")
+    total_interactions = 0
+    try:
+        if os.path.exists(db_path):
+            async with aiosqlite.connect(db_path) as db:
+                cursor = await db.execute("SELECT COUNT(*) as total FROM chatbot_logs WHERE status='success'")
+                row = await cursor.fetchone()
+                if row:
+                    total_interactions = row[0]
+    except Exception as e:
+        audit_logger.error(f"Failed to fetch dashboard stats: {e}")
+        
+    return {"interactions": total_interactions}
+
 # ─── YouTube Intelligence API ───
 @app.get("/api/search-youtube")
 async def api_search_youtube(q: str = Query(...)):

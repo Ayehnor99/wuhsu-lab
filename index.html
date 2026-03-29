@@ -1503,6 +1503,16 @@
 
       // Tab states
       const [chatTab, setChatTab] = useState('chat');
+      const [dashStats, setDashStats] = useState({ interactions: 0 });
+      
+      useEffect(() => {
+          if (chatTab === 'dash') {
+              fetch('/api/dashboard-stats')
+                  .then(r => r.json())
+                  .then(data => setDashStats(data))
+                  .catch(e => console.error("Stats fetching failed:", e));
+          }
+      }, [chatTab]);
       const [youtubeUrl, setYoutubeUrl] = useState('');
       const [sandboxMode, setSandboxMode] = useState('3D'); // '3D' or 'YOUTUBE'
       const [isSearchingVideo, setIsSearchingVideo] = useState(false);
@@ -1723,6 +1733,16 @@
           const newId = `term-${Date.now()}`;
           setTerminals(prev => [...prev, { id: newId, name: `bash@kali:${prev.length + 1}` }]);
           setActiveTermId(newId);
+      };
+
+      const removeTerminal = (idToRemove) => {
+          setTerminals(prev => {
+              const newTerms = prev.filter(t => t.id !== idToRemove);
+              if (activeTermId === idToRemove) {
+                  setActiveTermId(newTerms[newTerms.length - 1].id);
+              }
+              return newTerms;
+          });
       };
 
       useEffect(() => {
@@ -1980,14 +2000,31 @@
                   <span className="panel-title">AGENTIC TERMINAL</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflowX: 'auto', flex: 1, paddingLeft: '16px' }}>
-                  {terminals.map(term => (
-                      <button 
+                  {terminals.map((term, idx) => (
+                      <div 
                           key={term.id}
                           className={`ptab ${activeTermId === term.id ? 'active' : ''}`}
-                          onClick={() => setActiveTermId(term.id)}
+                          style={{ display: 'flex', alignItems: 'center' }}
                       >
-                          {term.name}
-                      </button>
+                          <button 
+                              style={{ background: 'transparent', border: 'none', color: 'inherit', fontFamily: 'inherit', fontSize: 'inherit', padding: 0, cursor: 'pointer' }}
+                              onClick={() => setActiveTermId(term.id)}
+                          >
+                              {term.name}
+                          </button>
+                          {idx > 0 && (
+                              <button
+                                  title="Close Session"
+                                  style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 0, marginLeft: '8px', display: 'flex', alignItems: 'center' }}
+                                  onClick={(e) => {
+                                      e.stopPropagation();
+                                      removeTerminal(term.id);
+                                  }}
+                              >
+                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                              </button>
+                          )}
+                      </div>
                   ))}
                   <button className="ptab" title="New Session" onClick={addNewTerminal} style={{ fontWeight: 'bold' }}>+</button>
                 </div>
@@ -2222,6 +2259,19 @@
                       </div>
                     </div>
 
+                    {/* ===== Dynamic AI Statistics ===== */}
+                    <div className="dash-header" style={{ marginTop: '10px' }}>⬡ Global Statistics</div>
+                    <div style={{ display: 'flex', gap: '10px', marginBottom: '24px' }}>
+                        <div style={{ flex: 1, background: 'var(--bg-panel)', padding: '14px', borderRadius: '10px', border: '1px solid var(--border-color)', textAlign: 'center', boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.5)' }}>
+                            <div style={{ fontSize: '24px', color: 'var(--cyan)', fontWeight: 'bold', fontFamily: "'JetBrains Mono', monospace" }}>{dashStats.interactions || 0}</div>
+                            <div style={{ fontSize: '9px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginTop: '4px' }}>AI Interactions</div>
+                        </div>
+                        <div style={{ flex: 1, background: 'var(--bg-panel)', padding: '14px', borderRadius: '10px', border: '1px solid var(--border-color)', textAlign: 'center', boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.5)' }}>
+                            <div style={{ fontSize: '24px', color: 'var(--amber)', fontWeight: 'bold', fontFamily: "'JetBrains Mono', monospace" }}>{skills.reduce((acc, s) => acc + s.pct, 0)}</div>
+                            <div style={{ fontSize: '9px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginTop: '4px' }}>Total XP Gained</div>
+                        </div>
+                    </div>
+
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
                         <div className="dash-header" style={{ margin: 0 }}>⬡ Learning Progress — Skill Tree</div>
                         <button className="ptab active" onClick={() => {
@@ -2258,14 +2308,6 @@
                 <div className="sb-dot"></div>
                 <span className="sb-label">STATUS</span>
                 <span className="sb-value green">OPERATIONAL</span>
-              </div>
-              <div className="sb-item">
-                <span className="sb-label">CPU</span>
-                <span className="sb-value">12%</span>
-              </div>
-              <div className="sb-item">
-                <span className="sb-label">MEM</span>
-                <span className="sb-value">2.1 GB</span>
               </div>
               <div className="sb-item">
                 <span className="sb-label">AGENTS</span>
