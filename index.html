@@ -1,0 +1,2296 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://unpkg.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' ws://127.0.0.1:8000 wss://127.0.0.1:8000 ws://localhost:8000 wss://localhost:8000 https://cdn.jsdelivr.net https://unpkg.com; img-src 'self' data: https://i.ytimg.com; frame-src https://www.youtube.com;">
+  <title>WUHSU LAB — Agentic Cybersecurity Environment</title>
+
+  <!-- Session token (injected by FastAPI/Jinja2 on every page load) -->
+  <script>const SESSION_TOKEN = "{{ session_token }}";</script>
+
+  <!-- Font: JetBrains Mono + Inter for mixed UI  -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet" />
+
+  <!-- Force UMD to bypass Qt CommonJS injection -->
+  <script>
+    window.module = undefined;
+    window.exports = undefined;
+    window.define = undefined;
+  </script>
+
+  <!-- xterm.js -->
+  <link rel="stylesheet" href="/static/css/xterm.css" />
+  <script src="/static/js/xterm.js"></script>
+  <script src="/static/js/xterm-addon-fit.js"></script>
+  <script src="/static/js/xterm-addon-web-links.js"></script>
+
+  <!-- Three.js -->
+  <script src="/static/js/three.min.js"></script>
+
+  <!-- React & Babel -->
+  <script src="/static/js/react.production.min.js"></script>
+  <script src="/static/js/react-dom.production.min.js"></script>
+  <script src="/static/js/babel.min.js"></script>
+
+  <!-- Marked.js for parsing LLM Markdown -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+  {% raw %}
+  <style>
+    /* ═══════════════════════════════════════════════════════════════
+     WUHSU LAB — DESIGN SYSTEM
+     Premium dark cybersecurity aesthetic with depth & motion
+  ═══════════════════════════════════════════════════════════════ */
+
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      /* Advanced Cupertino Palette & Glassmorphism */
+      --bg-base: #000000; /* OLED True Black */
+      --bg-panel: rgba(20, 22, 30, 0.55); /* Frosted Glass Base */
+      --bg-panel-alt: rgba(30, 32, 45, 0.4);
+      --bg-input: rgba(25, 28, 38, 0.7);
+      --bg-hover: rgba(255, 255, 255, 0.08);
+      --border-color: rgba(255, 255, 255, 0.1); /* Subtle Apple-style border */
+      --border-glow: rgba(74, 222, 128, 0.12);
+      --glass-blur: blur(24px); /* Cupertino Frosted Blur */
+
+      /* Text */
+      --text-primary: #F5F5F7;
+      --text-secondary: #A1A1AA;
+      --text-muted: #71717A;
+
+      /* Accent */
+      --accent: #4ADE80;
+      --accent-dim: rgba(74, 222, 128, 0.10);
+      --accent-mid: rgba(74, 222, 128, 0.25);
+      --accent-glow: rgba(74, 222, 128, 0.40);
+
+      /* Secondary accents */
+      --cyan: #06B6D4;
+      --purple: #A78BFA;
+      --amber: #F59E0B;
+
+      /* Futuristic Gradients */
+      --user-bubble: linear-gradient(135deg, #0A84FF 0%, #5E5CE6 100%); /* Apple iMessage Blue/Purple */
+      --wuhsu-bubble: rgba(30, 32, 45, 0.75); /* Frosted Wuhsu bubble */
+
+      /* Window controls */
+      --dot-red: #FF5F56;
+      --dot-yellow: #FFBD2E;
+      --dot-green: #27C93F;
+
+      /* Aurora palette for panel focus rim */
+      --w-red: #FF3B30;
+      --w-orange: #FF9500;
+      --w-gold: #FFD700;
+      --w-lime: #4ADE80;
+      --w-green: #00E65B;
+    }
+
+    html,
+    body,
+    #root {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      font-family: 'Inter', 'JetBrains Mono', system-ui, sans-serif;
+      color: var(--text-primary);
+      background: var(--bg-base);
+      background-image: radial-gradient(circle at 50% -20%, rgba(34, 211, 238, 0.08), transparent 50%),
+                        radial-gradient(circle at 100% 100%, rgba(94, 92, 230, 0.08), transparent 50%);
+    }
+
+    /* ── Animated dot-grid background ── */
+    #bg-canvas {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      opacity: 0.35;
+    }
+
+    /* ── ROOT LAYOUT ── */
+    .app-shell {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      padding: 10px;
+      gap: 10px;
+    }
+
+    /* ── TITLEBAR ── */
+    .titlebar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 36px;
+      flex-shrink: 0;
+      padding: 0 14px;
+      background: linear-gradient(135deg, var(--bg-panel) 0%, var(--bg-panel-alt) 100%);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+    }
+
+    .titlebar-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-shield {
+      width: 18px;
+      height: 18px;
+      fill: none;
+      stroke: var(--accent);
+      stroke-width: 2;
+      filter: drop-shadow(0 0 6px var(--accent-glow));
+      animation: pulseGlow 3s ease-in-out infinite;
+    }
+
+    @keyframes pulseGlow {
+
+      0%,
+      100% {
+        filter: drop-shadow(0 0 4px var(--accent-dim));
+      }
+
+      50% {
+        filter: drop-shadow(0 0 10px var(--accent-glow));
+      }
+    }
+
+    .app-title {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      font-size: 13px;
+      color: var(--accent);
+      letter-spacing: 2px;
+    }
+
+    .app-subtitle {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-left: 6px;
+      letter-spacing: 0.5px;
+    }
+
+    .titlebar-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      background: var(--accent);
+      border-radius: 50%;
+      animation: breathe 2s ease-in-out infinite;
+    }
+
+    @keyframes breathe {
+
+      0%,
+      100% {
+        box-shadow: 0 0 4px var(--accent-dim);
+        opacity: 0.7;
+      }
+
+      50% {
+        box-shadow: 0 0 12px var(--accent-glow);
+        opacity: 1;
+      }
+    }
+
+    .agent-count {
+      background: var(--accent-dim);
+      color: var(--accent);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 600;
+    }
+
+    /* ── MAIN WORKSPACE ── */
+    .workspace {
+      display: flex;
+      gap: 0;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── RESIZER HANDLE ── */
+    .resizer {
+      width: 6px;
+      cursor: col-resize;
+      flex-shrink: 0;
+      background: transparent;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+      z-index: 10;
+    }
+
+    .resizer::after {
+      content: '';
+      width: 2px;
+      height: 40px;
+      border-radius: 1px;
+      background: var(--border-color);
+      transition: all 0.2s;
+    }
+
+    .resizer:hover {
+      background: var(--accent-dim);
+    }
+
+    .resizer:hover::after {
+      background: var(--accent);
+      height: 60px;
+    }
+
+    /* ── PANELS ── */
+    .panel {
+      background: var(--bg-panel);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--border-color);
+      border-radius: 18px; /* Smooth Cupertino Corners */
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      transition: border-color 0.4s ease, box-shadow 0.4s ease;
+    }
+
+    .panel:hover {
+      border-color: rgba(74, 222, 128, 0.08);
+    }
+
+    /* ════════════════════════════════════════════════════════════════════════════
+       DYNAMIC PANEL FOCUS (Eye-Fatigue Mitigation)
+       ════════════════════════════════════════════════════════════════════════════ */
+
+    /* The subtle glowing top-rim for the active panel */
+    .panel::after {
+      content: "";
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(
+        90deg,
+        var(--w-red), var(--w-orange), var(--w-gold), var(--w-lime), var(--w-green), 
+        var(--w-lime), var(--w-gold), var(--w-orange), var(--w-red)
+      );
+      background-size: 200% auto;
+      /* 8s speed = very slow, calming breathing effect to prevent eye strain */
+      animation: wuhsu-liquid-pan 8s linear infinite; 
+      opacity: 0;
+      transition: opacity 0.5s ease;
+      z-index: 10;
+      border-top-left-radius: 18px;
+      border-top-right-radius: 18px;
+    }
+
+    /* When a panel is focused, the rim glows and the border slightly highlights */
+    .panel.focused-panel::after {
+      opacity: 1;
+    }
+    
+    .panel.focused-panel {
+      border-color: rgba(255, 215, 0, 0.2); /* Very faint gold border */
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 20px rgba(0, 230, 91, 0.03); /* Subtle ambient green shadow */
+    }
+
+    @keyframes wuhsu-liquid-pan {
+      0%   { background-position: 0% center; }
+      100% { background-position: 200% center; }
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 38px;
+      padding: 4px 14px 0;
+      flex-shrink: 0;
+      border-bottom: 1px solid var(--border-color);
+      background: var(--bg-panel-alt);
+    }
+
+    .panel-header-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .window-controls {
+      display: flex;
+      gap: 6px;
+    }
+
+    @keyframes pulse-dot {
+      0% { transform: scale(1); opacity: 0.85; filter: brightness(1); }
+      50% { transform: scale(1.2); opacity: 1; filter: brightness(1.8) drop-shadow(0 0 5px currentColor); }
+      100% { transform: scale(1); opacity: 0.85; filter: brightness(1); }
+    }
+
+    .mac-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+    }
+
+    .mac-dot:hover {
+      transform: scale(1.4);
+      filter: brightness(2) drop-shadow(0 0 8px currentColor);
+    }
+
+    .mac-dot.r {
+      background: var(--dot-red);
+      box-shadow: 0 0 10px rgba(255, 95, 86, 0.7);
+      animation: pulse-dot 2.5s infinite ease-in-out;
+      color: var(--dot-red);
+    }
+
+    .mac-dot.y {
+      background: var(--dot-yellow);
+      box-shadow: 0 0 10px rgba(255, 189, 46, 0.7);
+      animation: pulse-dot 2.5s infinite ease-in-out 0.4s;
+      color: var(--dot-yellow);
+    }
+
+    .mac-dot.g {
+      background: var(--dot-green);
+      box-shadow: 0 0 10px rgba(39, 201, 63, 0.7);
+      animation: pulse-dot 2.5s infinite ease-in-out 0.8s;
+      color: var(--dot-green);
+    }
+
+    .panel-title {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 1.5px;
+    }
+
+    .panel-tabs {
+      display: flex;
+      gap: 2px;
+    }
+
+    .ptab {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      padding: 4px 10px;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: all 0.2s;
+      letter-spacing: 0.5px;
+    }
+
+    .ptab:hover {
+      color: var(--text-secondary);
+      background: var(--bg-hover);
+    }
+
+    .ptab.active {
+      color: var(--accent);
+      background: var(--accent-dim);
+    }
+
+    /* ── TERMINAL AREA ── */
+    .terminal-panel {
+      min-width: 300px;
+      min-height: 0;
+    }
+
+    #terminal-container {
+      flex: 1;
+      overflow: hidden;
+      min-height: 0;
+      min-width: 0;
+    }
+
+    .terminal-wrapper {
+      flex: 1;
+      padding: 12px 14px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      min-width: 0;
+    }
+
+    .xterm-viewport {
+      background: transparent !important;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border-color) transparent;
+    }
+
+    .xterm-viewport::-webkit-scrollbar {
+      width: 5px;
+    }
+
+    .xterm-viewport::-webkit-scrollbar-thumb {
+      background: var(--border-color);
+      border-radius: 3px;
+    }
+
+    /* ── RIGHT COLUMN LAYOUT ── */
+    .right-col {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      overflow: hidden;
+      min-width: 280px;
+    }
+
+    /* ── SANDBOX BODY ── */
+    .sandbox-body {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(ellipse at center, rgba(74, 222, 128, 0.03) 0%, var(--bg-base) 70%);
+    }
+
+    #three-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .sandbox-overlay {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+    }
+
+    .mode-pill {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: var(--bg-input);
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      letter-spacing: 0.5px;
+    }
+
+    .youtube-container {
+      width: 100%;
+      height: 100%;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .youtube-iframe {
+      flex: 1;
+      width: 100%;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+    }
+
+    /* ── CHAT & DASHBOARD ── */
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border-color) transparent;
+    }
+
+    .chat-messages::-webkit-scrollbar {
+      width: 5px;
+    }
+
+    .chat-messages::-webkit-scrollbar-thumb {
+      background: var(--border-color);
+      border-radius: 3px;
+    }
+
+    .msg {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      animation: msgFadeIn 0.35s ease-out;
+    }
+
+    @keyframes msgFadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .msg-text {
+      background: var(--bg-input);
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      line-height: 1.7;
+      color: var(--text-primary);
+      border: 1px solid transparent;
+    }
+
+    .msg.wuhsu .msg-text {
+      background: var(--wuhsu-bubble);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--border-color);
+      border-left: 3px solid var(--cyan);
+      border-radius: 16px 16px 16px 4px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    }
+
+    .msg.user .msg-text {
+      background: var(--user-bubble);
+      color: #FFFFFF;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 16px 16px 4px 16px; /* Smooth chat bubble tail */
+      box-shadow: 0 4px 12px rgba(10, 132, 255, 0.2);
+      align-self: flex-end;
+    }
+
+    /* Beginner-friendly Command Highlighter */
+    .msg-text code {
+      background: #090A0F; /* Deep terminal black */
+      color: var(--accent); /* Hacker Green */
+      padding: 4px 8px;
+      border-radius: 6px;
+      border: 1px solid rgba(74, 222, 128, 0.2);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11.5px;
+      box-shadow: inset 0 2px 4px rgba(0,0,0,0.5), 0 0 8px rgba(74, 222, 128, 0.1);
+      display: inline-block;
+      margin: 2px 0;
+      word-break: break-all;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       MARKDOWN & TABLE TYPOGRAPHY (CUPERTINO STYLING)
+       ═══════════════════════════════════════════════════════════════ */
+    
+    .msg-text p { margin-bottom: 10px; }
+    .msg-text p:last-child { margin-bottom: 0; }
+    
+    /* Beautiful Headers */
+    .msg-text h1, .msg-text h2, .msg-text h3 {
+      color: var(--cyan);
+      margin-top: 14px; 
+      margin-bottom: 8px;
+      font-size: 13px; 
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    /* Lists */
+    .msg-text ul, .msg-text ol {
+      margin-left: 20px; 
+      margin-bottom: 10px;
+    }
+    .msg-text li { margin-bottom: 4px; }
+
+    /* 🌟 ELEGANT GLASS TABLES 🌟 */
+    .msg-text table {
+      width: 100%; 
+      border-collapse: separate; 
+      border-spacing: 0;
+      margin: 12px 0; 
+      border-radius: 8px; 
+      overflow: hidden;
+      border: 1px solid var(--border-color);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+    
+    .msg-text th {
+      background: rgba(6, 182, 212, 0.15); /* Cyan Tint */
+      color: var(--cyan); 
+      text-align: left; 
+      padding: 8px 12px;
+      font-weight: 700; 
+      font-size: 10.5px; 
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      border-bottom: 1px solid var(--border-color);
+    }
+    
+    .msg-text td {
+      padding: 8px 12px; 
+      background: rgba(0, 0, 0, 0.3); /* Dark glass */
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      font-size: 11.5px;
+    }
+    
+    .msg-text tr:last-child td { 
+      border-bottom: none; 
+    }
+
+    /* Keep the code highlighting intact */
+    .msg-text pre {
+      background: #000;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(74, 222, 128, 0.2);
+      overflow-x: auto;
+      margin: 10px 0;
+    }
+
+    /* Wuhsu Robot Avatar in Chat */
+    .wuhsu-robot-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 1px solid rgba(74, 222, 128, 0.3);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3), 0 0 8px rgba(74, 222, 128, 0.15);
+    }
+
+    .msg-meta {
+      font-size: 9px;
+      color: var(--text-muted);
+      display: flex;
+      gap: 8px;
+      padding-left: 4px;
+      align-items: center;
+    }
+
+    .msg.user .msg-meta {
+      justify-content: flex-end;
+      padding-right: 4px;
+    }
+
+    .wuhsu-avatar {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      flex-shrink: 0;
+    }
+
+    /* Chat Input */
+    .chat-input-area {
+      padding: 10px 14px;
+      border-top: 1px solid var(--border-color);
+      background: rgba(13, 17, 23, 0.5);
+    }
+
+    .chat-input-row {
+      display: flex;
+      gap: 6px;
+      align-items: flex-end;
+    }
+
+    .action-btn {
+      width: 34px;
+      height: 34px;
+      flex-shrink: 0;
+      border-radius: 7px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-input);
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      transition: all 0.2s;
+    }
+
+    .action-btn:hover {
+      background: var(--bg-hover);
+      color: var(--text-secondary);
+    }
+
+    .action-btn.send {
+      background: var(--accent-dim);
+      color: var(--accent);
+      border-color: transparent;
+    }
+
+    .action-btn.send:hover {
+      background: var(--accent);
+      color: var(--bg-base);
+      box-shadow: 0 0 16px var(--accent-glow);
+    }
+
+    .chat-input {
+      flex: 1;
+      background: var(--bg-input);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      padding: 9px 12px;
+      border-radius: 7px;
+      resize: none;
+      min-height: 34px;
+      max-height: 120px;
+      outline: none;
+      transition: 0.25s;
+    }
+
+    .chat-input:focus {
+      border-color: var(--accent-dim);
+      box-shadow: 0 0 0 2px var(--accent-dim);
+    }
+
+    .chat-input::placeholder {
+      color: var(--text-muted);
+    }
+
+    /* ── DASHBOARD UI ── */
+    .dashboard-view {
+      padding: 14px;
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    .dash-header {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-bottom: 14px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+    }
+
+    .skill-item {
+      margin-bottom: 14px;
+    }
+
+    .skill-top {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      margin-bottom: 6px;
+      color: var(--text-secondary);
+    }
+
+    .skill-bar {
+      height: 5px;
+      background: var(--bg-input);
+      border-radius: 3px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .skill-fill {
+      height: 100%;
+      border-radius: 3px;
+      background: var(--text-muted);
+      transition: width 1.2s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .skill-fill.expert {
+      background: linear-gradient(90deg, var(--accent) 0%, var(--cyan) 100%);
+      box-shadow: 0 0 8px var(--accent-dim);
+    }
+
+    .skill-fill.good {
+      background: linear-gradient(90deg, var(--accent) 0%, var(--amber) 100%);
+    }
+
+    /* Typing Dots */
+    .typing {
+      display: flex;
+      gap: 5px;
+      padding: 4px 0;
+    }
+
+    .dot {
+      width: 6px;
+      height: 6px;
+      background: var(--accent);
+      border-radius: 50%;
+      animation: bounce 1.4s infinite ease-in-out both;
+      opacity: 0.5;
+    }
+
+    .dot:nth-child(1) {
+      animation-delay: -0.32s;
+    }
+
+    .dot:nth-child(2) {
+      animation-delay: -0.16s;
+    }
+
+    @keyframes bounce {
+
+      0%,
+      80%,
+      100% {
+        transform: scale(0);
+        opacity: 0.3;
+      }
+
+      40% {
+        transform: scale(1);
+        opacity: 1;
+      }
+    }
+
+    /* ── STATUS BAR ── */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 26px;
+      flex-shrink: 0;
+      padding: 0 14px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: var(--text-muted);
+      letter-spacing: 0.5px;
+    }
+
+    .status-bar-left, .status-bar-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .sb-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .sb-label {
+      color: var(--text-muted);
+    }
+
+    .sb-value {
+      color: var(--text-secondary);
+    }
+
+    .sb-value.green {
+      color: var(--accent);
+    }
+
+    .sb-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 6px var(--accent-glow);
+    }
+
+    /* Selection */
+    ::selection {
+      background: var(--accent-mid);
+      color: var(--text-primary);
+    }
+
+    /* Terminal connection status dot */
+    .term-status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      transition: background 0.3s;
+    }
+
+    .term-status-dot.connected {
+      background: var(--accent);
+      box-shadow: 0 0 6px var(--accent-glow);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+
+    .term-status-dot.connecting,
+    .term-status-dot.disconnected {
+      background: var(--amber);
+      animation: blink-dot 1s ease-in-out infinite;
+    }
+
+    .term-status-dot.error {
+      background: #FF5F56;
+      box-shadow: 0 0 6px rgba(255, 95, 86, 0.4);
+    }
+
+    @keyframes pulse-dot {
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0.5;
+      }
+    }
+
+    @keyframes blink-dot {
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      100% {
+        opacity: 0.2;
+      }
+    }
+
+    /* ─── 3D Visualizer Additions ─── */
+    #label-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 10;
+      overflow: hidden;
+    }
+    .node-label {
+      position: absolute;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      animation: lfIn .3s ease;
+    }
+    @keyframes lfIn { from { opacity: 0; transform: translateX(-50%) translateY(5px) } to { opacity: 1; transform: translateX(-50%) translateY(0) } }
+    .nl-box {
+      background: rgba(5, 10, 15, 0.9);
+      border: 1px solid;
+      border-radius: 3px;
+      padding: 3px 8px;
+      text-align: center;
+      white-space: nowrap;
+      backdrop-filter: blur(4px);
+    }
+    .nl-name {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+    }
+    .nl-sub {
+      font-size: 7.5px;
+      color: var(--text-muted);
+      letter-spacing: .5px;
+      margin-top: 1px;
+    }
+    .nl-connector {
+      width: 1px;
+      height: 18px;
+      opacity: .5;
+    }
+    .pkt-label {
+      position: absolute;
+      transform: translateX(-50%);
+      background: rgba(5, 10, 15, 0.8);
+      border-radius: 2px;
+      padding: 2px 5px;
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      white-space: nowrap;
+      border: 1px solid;
+      pointer-events: none;
+    }
+    .viz-overlay-bottom {
+      position: absolute;
+      bottom: 12px;
+      left: 14px;
+      pointer-events: none;
+      z-index: 5;
+    }
+    .viz-overlay-label {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: var(--cyan);
+      text-shadow: 0 0 10px rgba(34, 211, 238, 0.4);
+      text-transform: uppercase;
+    }
+    .viz-overlay-sub {
+      font-size: 9px;
+      color: var(--text-muted);
+      letter-spacing: 1px;
+    }
+    .intensity-meter-wrap {
+      position: absolute;
+      bottom: 12px;
+      right: 14px;
+      width: 80px;
+      pointer-events: none;
+    }
+    .intensity-bar {
+      height: 3px;
+      background: var(--border-color);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-top: 4px;
+    }
+    .intensity-fill {
+      height: 100%;
+      background: var(--accent);
+      box-shadow: 0 0 6px var(--accent-glow);
+      transition: width 0.5s ease;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- Animated background canvas - rendered below all UI -->
+  <canvas id="bg-canvas"></canvas>
+
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    const now = () => new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+    const INITIAL_MSGS = [
+      {
+        id: 1, from: 'wuhsu', name: 'Wuhsu Master', time: now(),
+        text: 'Welcome to WUHSU LAB. I am your AI cybersecurity mentor with full terminal visibility.\nType commands in the terminal — I will intercept, analyze, and guide you in real-time.\n\nTry running `nmap -sV target.local` to begin reconnaissance.'
+      },
+    ];
+
+    /* ═══════════════════════════════════════
+       ANIMATED BACKGROUND (dot grid)
+    ═══════════════════════════════════════ */
+    function initBackground() {
+      const canvas = document.getElementById('bg-canvas');
+      const ctx = canvas.getContext('2d');
+      let W, H, dots = [];
+
+      function resize() {
+        W = canvas.width = window.innerWidth;
+        H = canvas.height = window.innerHeight;
+        dots = [];
+        const spacing = 40;
+        for (let x = 0; x < W; x += spacing) {
+          for (let y = 0; y < H; y += spacing) {
+            dots.push({ x, y, baseAlpha: Math.random() * 0.3 + 0.05, phase: Math.random() * Math.PI * 2 });
+          }
+        }
+      }
+
+      let t = 0;
+      function animate() {
+        requestAnimationFrame(animate);
+        ctx.clearRect(0, 0, W, H);
+        t += 0.008;
+        for (const d of dots) {
+          const alpha = d.baseAlpha + Math.sin(t + d.phase) * 0.08;
+          ctx.fillStyle = `rgba(74, 222, 128, ${Math.max(0, alpha)})`;
+          ctx.fillRect(d.x, d.y, 1.2, 1.2);
+        }
+      }
+
+      resize();
+      window.addEventListener('resize', resize);
+      animate();
+    }
+
+    /* ═══════════════════════════════════════
+       THREE.JS — Network Topology Scene
+    ═══════════════════════════════════════ */
+    /* ═══════════════════════════════════════
+       THREE.JS — Advanced Visualizer Engine
+    ═══════════════════════════════════════ */
+    function initThree(canvas) {
+      const wrap = canvas.parentElement;
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.toneMapping = THREE.ReinhardToneMapping;
+      renderer.toneMappingExposure = 1.2;
+      
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
+      camera.position.set(0, 3, 14);
+      scene.add(new THREE.AmbientLight(0xffffff, 0.3));
+
+      let isDragging = false, prevMouse = { x: 0, y: 0 };
+      let sph = { theta: 0.3, phi: Math.PI / 3.5, radius: 14 };
+
+      canvas.addEventListener('mousedown', e => { isDragging = true; prevMouse = { x: e.clientX, y: e.clientY }; });
+      window.addEventListener('mouseup', () => { isDragging = false; });
+      canvas.addEventListener('mousemove', e => {
+        if (!isDragging) return;
+        sph.theta -= (e.clientX - prevMouse.x) * 0.01;
+        sph.phi = Math.max(.2, Math.min(Math.PI - .2, sph.phi + (e.clientY - prevMouse.y) * 0.01));
+        prevMouse = { x: e.clientX, y: e.clientY };
+        updateCam();
+      });
+      canvas.addEventListener('wheel', e => { sph.radius = Math.max(5, Math.min(30, sph.radius + e.deltaY * 0.02)); updateCam(); }, { passive: true });
+
+      function updateCam() {
+        camera.position.set(sph.radius * Math.sin(sph.phi) * Math.sin(sph.theta), sph.radius * Math.cos(sph.phi), sph.radius * Math.sin(sph.phi) * Math.cos(sph.theta));
+        camera.lookAt(0, 0, 0);
+      }
+      updateCam();
+
+      function resizeRenderer() {
+        const W = wrap.clientWidth, H = wrap.clientHeight;
+        if (W && H) { renderer.setSize(W, H, false); camera.aspect = W / H; camera.updateProjectionMatrix(); }
+      }
+      window.addEventListener('resize', resizeRenderer); resizeRenderer();
+      new ResizeObserver(resizeRenderer).observe(wrap);
+
+      // ── Labels ──
+      const labelLayer = document.getElementById('label-layer');
+      let labelTrack = [];
+      function makeLabel(name, sub, hexColor, source, yOffset = 1.0) { 
+        const el = document.createElement('div');
+        el.className = 'node-label';
+        el.innerHTML = `<div class="nl-box" style="border-color:${hexColor}"><div class="nl-name" style="color:${hexColor}">${name}</div>${sub ? `<div class="nl-sub">${sub}</div>` : ''}</div><div class="nl-connector" style="background:${hexColor}"></div>`;
+        labelLayer.appendChild(el);
+        labelTrack.push({ el, source, yOffset });
+        return el;
+      }
+      function makePktLabel(text, hexColor, source) {
+        const el = document.createElement('div');
+        el.className = 'pkt-label'; el.style.color = hexColor; el.style.borderColor = hexColor; el.textContent = text;
+        labelLayer.appendChild(el);
+        labelTrack.push({ el, source, yOffset: 0.35 });
+        return el;
+      }
+      function clearLabels() { labelLayer.innerHTML = ''; labelTrack = []; }
+      function updateLabels() {
+        if (!labelLayer) return;
+        const rect = wrap.getBoundingClientRect();
+        const tmp = new THREE.Vector3();
+        labelTrack.forEach(({ el, source, yOffset }) => {
+          if (source.isVector3) { tmp.copy(source); tmp.y += yOffset; }
+          else { if (!source.visible) { el.style.display = 'none'; return; } source.getWorldPosition(tmp); tmp.y += yOffset; }
+          tmp.project(camera);
+          if (tmp.z > 1) { el.style.display = 'none'; return; }
+          el.style.display = 'block';
+          el.style.left = ((tmp.x * .5 + .5) * rect.width) + 'px';
+          el.style.top = ((-tmp.y * .5 + .5) * rect.height) + 'px';
+        });
+      }
+
+      // ── Core Utils ──
+      let currentSceneType = 'NETWORK_TOPOLOGY', animFrameId = null, sceneObjects = [], animState = {};
+      function disposeScene() {
+        if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null; }
+        clearLabels();
+        sceneObjects.forEach(o => {
+          scene.remove(o);
+          if (o.geometry) o.geometry.dispose();
+          if (o.material) { Array.isArray(o.material) ? o.material.forEach(m => m.dispose()) : o.material.dispose(); }
+        });
+        sceneObjects = []; animState = {};
+      }
+      function addObj(o) { scene.add(o); sceneObjects.push(o); return o; }
+      const glowMat = (color, ei = 2) => new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: ei, metalness: .2, roughness: .4 });
+      const lineMat = (color, op = 1) => new THREE.LineBasicMaterial({ color, transparent: op < 1, opacity: op });
+      function makeNode(pos, color, radius = 0.4) {
+        const m = new THREE.Mesh(new THREE.SphereGeometry(radius, 16, 16), glowMat(color, 3));
+        m.position.set(...pos); 
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(radius * 1.6, .04, 8, 32), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: .4 }));
+        ring.rotation.x = Math.PI / 2; m.add(ring); addObj(m); return m;
+      }
+      function makeLine(a, b, color, op = .5) {
+        const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...a), new THREE.Vector3(...b)]);
+        return addObj(new THREE.Line(g, lineMat(color, op)));
+      }
+      function makePacket(color) { return addObj(new THREE.Mesh(new THREE.BoxGeometry(.18, .18, .18), glowMat(color, 5))); }
+
+      // ── Scene Builders ──
+      function buildTCPHandshake() {
+        const CL = [-5, 0, 0], SV = [5, 0, 0];
+        const client = makeNode(CL, 0x4ADE80, .6); const server = makeNode(SV, 0x00D4FF, .6);
+        makeLine(CL, SV, 0x1A3040, .8);
+        const syn = makePacket(0xFFBD2E), synAck = makePacket(0x00D4FF), ack = makePacket(0x4ADE80);
+        makeLabel('CLIENT', '192.168.1.10', '#4ADE80', client, 1.2);
+        makeLabel('SERVER', '10.0.0.1 : 80', '#00D4FF', server, 1.2);
+        makePktLabel('SYN', '#FFBD2E', syn); makePktLabel('SYN-ACK', '#00D4FF', synAck); makePktLabel('ACK', '#4ADE80', ack);
+        animState = { packets: [syn, synAck, ack], phaseTimer: 0 };
+      }
+      function buildProcessExecution() {
+        const shell = makeNode([-5, 2, 0], 0x4ADE80, 1);
+        makeLabel('BASH', 'PID: 1024', '#4ADE80', shell, 1.5);
+        const child = makeNode([0, 2, 0], 0x22D3EE, 0.8);
+        child.visible = false;
+        makeLabel('ls (EXEC)', 'PID: 5542', '#22D3EE', child, 1.2);
+        const syscalls = new THREE.Group();
+        for(let i=0; i<6; i++) {
+          const s = addObj(new THREE.Mesh(new THREE.BoxGeometry(.3,.3,.3), new THREE.MeshPhongMaterial({ color: 0xA78BFA, transparent: true })));
+          syscalls.add(s);
+        }
+        syscalls.visible = false;
+        scene.add(syscalls);
+        const kernel = addObj(new THREE.Mesh(new THREE.PlaneGeometry(15, 15), new THREE.MeshPhongMaterial({ color: 0x1A3040, transparent: true, opacity: .4, side: THREE.DoubleSide })));
+        kernel.rotation.x = Math.PI/2; kernel.position.y = -2;
+        makeLabel('KERNEL', 'SYSCALL LAYER', '#A78BFA', kernel, 2.0);
+        animState = { shell, child, syscalls, kernel, time: 0 };
+      }
+      function buildNetworkTopology() {
+        const COUNT = 6, R = 5;
+        const positions = [];
+        for (let i = 0; i < COUNT; i++) {
+          const a = (i / COUNT) * Math.PI * 2, x = Math.cos(a) * R, z = Math.sin(a) * R;
+          const node = makeNode([x, 0, z], 0x4ADE80, .4); positions.push([x, 0, z]);
+          makeLabel(`NODE-${i}`, `192.168.1.${10 + i}`, '#4ADE80', node, .9);
+        }
+        const hub = makeNode([0, 0, 0], 0xFFBD2E, .6); positions.push([0, 0, 0]);
+        makeLabel('ROUTER', '192.168.1.1', '#FFBD2E', hub, 1.0);
+        for (let i = 0; i < COUNT; i++) makeLine(positions[i], [0, 0, 0], 0x1A3040, .9);
+        const packets = [];
+        for (let i = 0; i < 4; i++) {
+          const pkt = makePacket(0x00D4FF);
+          packets.push({ mesh: pkt, target: i, t: Math.random() });
+        }
+        animState = { packets, positions };
+      }
+      function buildBruteForce() {
+        const target = makeNode([0, 0, 0], 0xFF3B3B, .8);
+        makeLabel('HASH TARGET', 'MD5: 5f4dcc3b...', '#FF3B3B', target, 1.4);
+        const attempts = [];
+        for (let col = 0; col < 5; col++) {
+          const x = (col - 2) * 2;
+          for (let row = 0; row < 6; row++) {
+            const cube = addObj(new THREE.Mesh(new THREE.BoxGeometry(.2, .2, .2), new THREE.MeshBasicMaterial({ color: 0x1A3040, transparent: true, opacity: .8 })));
+            cube.position.set(x, 4 + row * .5, 0);
+            attempts.push({ mesh: cube, speed: .04 + Math.random() * .03 });
+          }
+        }
+        animState = { attempts, target, progress: 0 };
+      }
+      function buildFileLock() {
+        const body = addObj(new THREE.Mesh(new THREE.BoxGeometry(2.5, 2, .8), glowMat(0xFF5F56, 1.5)));
+        body.position.set(0, -.4, 0);
+        const shackle = addObj(new THREE.Mesh(new THREE.TorusGeometry(1, .18, 12, 48, Math.PI), glowMat(0xCBD5E1, 2)));
+        shackle.position.set(0, .6, 0);
+        makeLabel('FILE: /etc/shadow', 'chmod 640', '#FF5F56', body, 1.6);
+        animState = { body, shackle };
+      }
+      function buildPortScan() {
+        const R = 5; const host = makeNode([0,0,0], 0x4ADE80, .7);
+        makeLabel('TARGET HOST', '10.0.0.5', '#4ADE80', host, 1.1);
+        const ports = [];
+        for(let i=0; i<8; i++){
+          const a = (i/8)*Math.PI*2; const x=Math.cos(a)*R, z=Math.sin(a)*R;
+          const node = makeNode([x,0,z], 0x1A3040, .3);
+          ports.push({node, a, open: i%3===0});
+        }
+        const sweep = addObj(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), new THREE.Vector3(R,0,0)]), lineMat(0x00D4FF)));
+        animState = { sweep, ports, angle: 0 };
+      }
+      function buildExploitChain() {
+        const pos = [[-6,0,0], [-2,2,0], [2,-1,0], [6,0,0]];
+        const nodes = pos.map((p, i) => {
+          const n = makeNode(p, i===0?0xFF3B3B:0x1A3040, .5);
+          makeLabel(i===0?'ATTACKER':`HOP-${i}`, i===0?'192.168.1.100':'Target', i===0?'#FF3B3B':'#8B949E', n, 1.0);
+          return n;
+        });
+        for(let i=0; i<pos.length-1; i++) makeLine(pos[i], pos[i+1], 0x1A3040);
+        const pkt = makePacket(0xFF3B3B); pkt.visible = false;
+        animState = { nodes, pkt, pos, hop: 0, t: 0 };
+      }
+      function buildDNSLookup() {
+        const lvls = [[0,4,0], [0,1,0], [-3,-2,0], [3,-2,0]];
+        const nodes = lvls.map((p, i) => makeNode(p, i===0?0x00D4FF:0x4ADE80, .45));
+        makeLabel('RESOLVER', '8.8.8.8', '#00D4FF', nodes[0], .9);
+        makeLabel('ROOT NS', 'a.root-servers', '#4ADE80', nodes[1], .9);
+        [[0,1], [1,2], [1,3]].forEach(([a,b]) => makeLine(lvls[a], lvls[b], 0x1A3040));
+        const pkt = makePacket(0x00D4FF);
+        animState = { pkt, lvls, path: [0, 1, 2, 1, 3, 1, 0], idx: 0, t: 0 };
+      }
+      function buildFirewall() {
+        makeLabel('INTERNET', '', '#FF5F56', new THREE.Vector3(-8,3,0), 0);
+        makeLabel('LAN', '', '#4ADE80', new THREE.Vector3(8,3,0), 0);
+        for(let y=-2; y<=2; y++){
+          const p = addObj(new THREE.Mesh(new THREE.BoxGeometry(.8, .8, .2), glowMat(0x1E3A5F, 1)));
+          p.position.set(0, y*1.2, 0);
+          makeLabel('RULE', 'iptables', '#00D4FF', p, .7);
+        }
+        const pkts = [];
+        for(let i=0; i<5; i++){
+          const p = makePacket(i%2===0?0x4ADE80:0xFF3B3B);
+          pkts.push({mesh: p, allow: i%2===0, speed: .05+Math.random()*.05, y: (i-2)*1.2});
+        }
+        animState = { pkts };
+      }
+      function buildStatusCheck() {
+        const colors = [0xFF5F56, 0xFFBD2E, 0x27C93F]; // Red, Gold, Green
+        const labels = ['CRITICAL', 'WARNING', 'OPTIMAL'];
+        const nodes = colors.map((c, i) => {
+          const n = makeNode([0, 0, 0], c, 0.6);
+          makeLabel(labels[i], 'Status Check', `#${c.toString(16).padStart(6, '0')}`, n, 1.2);
+          return { mesh: n, angle: (i / 3) * Math.PI * 2 };
+        });
+        animState = { nodes, time: 0 };
+      }
+
+      const SCENE_META = {
+        TCP_HANDSHAKE: { label: 'TCP HANDSHAKE', sub: 'SYN / SYN-ACK / ACK', meter: '50%', color: 'var(--cyan)' },
+        NETWORK_TOPOLOGY: { label: 'NETWORK TOPOLOGY', sub: 'DATA FLOW VISUALIZATION', meter: '50%', color: 'var(--accent)' },
+        FILE_LOCK: { label: 'FILE LOCK', sub: 'PERMISSION CONTROL', meter: '40%', color: 'var(--dot-red)' },
+        BRUTE_FORCE: { label: 'BRUTE FORCE', sub: 'CREDENTIAL CRACKING', meter: '90%', color: 'var(--dot-red)' },
+        PORT_SCAN: { label: 'PORT SCAN', sub: 'SERVICE ENUMERATION', meter: '60%', color: 'var(--cyan)' },
+        EXPLOIT_CHAIN: { label: 'EXPLOIT CHAIN', sub: 'LATERAL MOVEMENT', meter: '80%', color: 'var(--dot-red)' },
+        DNS_LOOKUP: { label: 'DNS LOOKUP', sub: 'RESOLUTION HIERARCHY', meter: '30%', color: 'var(--cyan)' },
+        FIREWALL_WALL: { label: 'FIREWALL', sub: 'PACKET FILTERING', meter: '55%', color: 'var(--accent)' },
+        STATUS_CHECK: { label: 'STATUS CHECK', sub: '360° HEALTH CYCLE', meter: '100%', color: 'var(--dot-green)' },
+        PROCESS_EXECUTION: { label: 'PROCESS EXECUTION', sub: 'SHELL → FORK → EXEC journey', meter: '75%', color: 'var(--purple)' },
+      };
+
+      // Export 3D trigger handler to global scope for App component integration
+      window.handle3DTrigger = (payload) => {
+        if (payload.panel !== '3D') return;
+        const type = payload.animation || 'NETWORK_TOPOLOGY';
+        currentSceneType = type;
+        disposeScene();
+        if (type === 'TCP_HANDSHAKE') buildTCPHandshake();
+        else if (type === 'BRUTE_FORCE') buildBruteForce();
+        else if (type === 'FILE_LOCK') buildFileLock();
+        else if (type === 'PORT_SCAN') buildPortScan();
+        else if (type === 'EXPLOIT_CHAIN') buildExploitChain();
+        else if (type === 'DNS_LOOKUP') buildDNSLookup();
+        else if (type === 'FIREWALL_WALL') buildFirewall();
+        else if (type === 'STATUS_CHECK') buildStatusCheck();
+        else if (type === 'PROCESS_EXECUTION') buildProcessExecution();
+        else buildNetworkTopology();
+        
+        const m = SCENE_META[type] || SCENE_META.NETWORK_TOPOLOGY;
+        const lblCl = document.getElementById('viz-label');
+        const subCl = document.getElementById('viz-sub');
+        const intCl = document.getElementById('viz-intensity-label');
+        const barCl = document.getElementById('viz-intensity-bar');
+
+        if(lblCl) lblCl.textContent = m.label;
+        if(subCl) subCl.textContent = m.sub;
+        if(intCl) intCl.textContent = payload.intensity || 'MEDIUM';
+        if(barCl) { barCl.style.width = m.meter; barCl.style.background = m.color; }
+      };
+
+      // Initial scene
+      buildNetworkTopology();
+      
+      // ── Loop ──
+      let frame = 0;
+      function animate() {
+        animFrameId = requestAnimationFrame(animate); frame++;
+        if (currentSceneType === 'TCP_HANDSHAKE' && animState.packets) {
+          const { packets, phaseTimer } = animState;
+          animState.phaseTimer++; const phase = Math.floor(phaseTimer / 60) % 3, lt = (phaseTimer % 60) / 60;
+          packets.forEach((p, i) => { p.visible = i === phase; if (i === phase) p.position.set(i === 1 ? 5 - 10 * lt : -5 + 10 * lt, .3, 0); });
+        } else if (currentSceneType === 'NETWORK_TOPOLOGY' && animState.packets) {
+          animState.packets.forEach(p => { p.t += 0.005; if (p.t >= 1) p.t = 0; const pos = animState.positions[p.target]; p.mesh.position.set(pos[0] * p.t, .2, pos[2] * p.t); });
+        } else if (currentSceneType === 'BRUTE_FORCE' && animState.attempts) {
+          animState.attempts.forEach(a => { a.mesh.position.y -= a.speed; if (a.mesh.position.y < -4) a.mesh.position.y = 5; });
+          if(animState.target) animState.target.rotation.y += .02;
+        } else if (currentSceneType === 'FILE_LOCK' && animState.body) {
+          animState.body.rotation.y = Math.sin(frame * .02) * .3; if(animState.shackle) animState.shackle.rotation.y = animState.body.rotation.y;
+        } else if (currentSceneType === 'PORT_SCAN' && animState.ports) {
+          animState.angle += .03; if(animState.sweep) animState.sweep.rotation.y = animState.angle;
+          animState.ports.forEach(p => {
+             const diff = Math.abs((animState.angle % (Math.PI*2)) - p.a);
+             if(diff < 0.1) p.node.material.emissiveIntensity = 5;
+             else p.node.material.emissiveIntensity = Math.max(1, p.node.material.emissiveIntensity * 0.95);
+          });
+        } else if (currentSceneType === 'EXPLOIT_CHAIN' && animState.pos) {
+           animState.t += .01; if(animState.t >= 1){ animState.t=0; animState.hop = (animState.hop+1)%(animState.pos.length-1); }
+           const f=animState.pos[animState.hop], o=animState.pos[animState.hop+1];
+           if(animState.pkt) { animState.pkt.visible=true; animState.pkt.position.set(f[0]+(o[0]-f[0])*animState.t, f[1]+(o[1]-f[1])*animState.t, 0); }
+        } else if (currentSceneType === 'DNS_LOOKUP' && animState.path) {
+           animState.t += .015; if(animState.t >= 1){ animState.t=0; animState.idx = (animState.idx+1)%(animState.path.length-1); }
+           const f=animState.lvls[animState.path[animState.idx]], o=animState.lvls[animState.path[animState.idx+1]];
+           if(animState.pkt) animState.pkt.position.set(f[0]+(o[0]-f[0])*animState.t, f[1]+(o[1]-f[1])*animState.t, 0);
+        } else if (currentSceneType === 'FIREWALL_WALL' && animState.pkts) {
+           animState.pkts.forEach(p => {
+             p.mesh.position.x += p.speed; p.mesh.position.y = p.y;
+             if(p.mesh.position.x > (p.allow?10:0)){ p.mesh.position.x = -12; }
+           });
+        } else if (currentSceneType === 'STATUS_CHECK' && animState.nodes) {
+            animState.time += 0.02;
+            const R = 4 + Math.sin(animState.time * 0.5) * 2; // Growing radius
+            animState.nodes.forEach((n, i) => {
+              const a = n.angle + animState.time;
+              n.mesh.position.set(Math.cos(a) * R, Math.sin(animState.time * 0.3 + i) * 1.5, Math.sin(a) * R);
+              const s = 0.5 + Math.sin(animState.time + i) * 0.5; // Pulsing scale
+              n.mesh.scale.set(s, s, s);
+              n.mesh.rotation.y += 0.05;
+            });
+          } else if (currentSceneType === 'PROCESS_EXECUTION' && animState.shell) {
+              animState.time += 0.015;
+              const phase = Math.floor(animState.time) % 5;
+              const t = animState.time % 1;
+              
+              if (phase === 0) { // SHELL IDLE
+                  animState.shell.scale.setScalar(1 + Math.sin(frame * 0.1) * 0.1);
+                  if (animState.child) animState.child.visible = false;
+                  if (animState.syscalls) animState.syscalls.visible = false;
+              } else if (phase === 1) { // FORK
+                  animState.child.visible = true;
+                  animState.child.position.x = t * 4;
+                  animState.child.material.color.setHex(0x22D3EE); // Cyan child
+              } else if (phase === 2) { // EXEC
+                  animState.child.material.color.lerp(new THREE.Color(0xFBBF24), t); // Morph to Gold (binary load)
+                  animState.child.scale.setScalar(1 + t * 0.5);
+              } else if (phase === 3) { // SYSCALLS
+                  animState.syscalls.visible = true;
+                  animState.syscalls.children.forEach((s, i) => {
+                      s.position.y = 2 - ((t * 4 + i * 0.1) % 4);
+                      s.material.opacity = 1 - (t % 1);
+                  });
+              } else if (phase === 4) { // OUTPUT / TERMINATE
+                  animState.child.scale.setScalar(1.5 - t * 1.5);
+                  animState.child.material.opacity = 1 - t;
+              }
+          }
+        renderer.render(scene, camera);
+        updateLabels();
+      }
+      animate();
+    }
+
+    /* ═══════════════════════════════════════
+       REACT APP
+    ═══════════════════════════════════════ */
+    // Stable session ID per page load (persists across messages)
+    const WUHSU_SESSION_ID = 'wuhsu_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+
+    function App() {
+      const [messages, setMessages] = useState(INITIAL_MSGS);
+      const [inputVal, setInputVal] = useState('');
+      const [isThinking, setIsThinking] = useState(false);
+
+      // Tab states
+      const [chatTab, setChatTab] = useState('chat');
+      const [youtubeUrl, setYoutubeUrl] = useState('');
+      const [sandboxMode, setSandboxMode] = useState('3D'); // '3D' or 'YOUTUBE'
+      const [isSearchingVideo, setIsSearchingVideo] = useState(false);
+
+
+      // Profile & Dashboard state
+      const [userName, setUserName] = useState('CyberSec Apprentice');
+      const [userAvatar, setUserAvatar] = useState(null);
+      const [isEditingProfile, setIsEditingProfile] = useState(false);
+      const [skills, setSkills] = useState([
+        { name: 'Network Reconnaissance', pct: 45, level: 'good' },
+        { name: 'Web Exploitation', pct: 30, level: '' },
+        { name: 'Social Engineering', pct: 65, level: 'good' },
+        { name: 'Cryptography', pct: 20, level: '' },
+        { name: 'Post-Exploitation', pct: 15, level: '' },
+        { name: 'Reporting & Documentation', pct: 10, level: '' },
+      ]);
+
+      // RAG upload state
+      const [ragUploading, setRagUploading] = useState(false);
+
+      // Downloader state
+      const [isDownloading, setIsDownloading] = useState(false);
+
+      // Dynamic Panel Focus (Aurora Routing)
+      const [activeFocus, setActiveFocus] = useState('terminal'); // 'terminal', 'sandbox', or 'chat'
+
+      // Uptime ticker
+      const [uptime, setUptime] = useState(0);
+
+      // Layout width
+      const [leftWidth, setLeftWidth] = useState(62); // percentage
+
+      const canvasRef = useRef(null);
+      const chatEndRef = useRef(null);
+      const fileInputRef = useRef(null);
+      const resizerRef = useRef(null);
+      const workspaceRef = useRef(null);
+      const skillBarsMounted = useRef(false);
+
+      // Chat WebSocket reference
+      const wsChatRef = useRef(null);
+
+      // Multi-Terminal State
+      const [terminals, setTerminals] = useState([{ id: 'term-1', name: 'bash@kali:1' }]);
+      const [activeTermId, setActiveTermId] = useState('term-1');
+      const xtermInstances = useRef({});
+
+      // -- Background animation --
+      useEffect(() => { initBackground(); }, []);
+
+      // -- Uptime --
+      useEffect(() => {
+        const iv = setInterval(() => setUptime(u => u + 1), 1000);
+        return () => clearInterval(iv);
+      }, []);
+      
+      // -- Chat WebSocket for Proactive AI --
+      useEffect(() => {
+        const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const chatWs = new WebSocket(`${wsProto}//${window.location.host}/ws/chat?token=${SESSION_TOKEN}`);
+        wsChatRef.current = chatWs;
+
+        chatWs.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data);
+            if (msg.type === 'auto_help' || msg.type === 'chat_reply') {
+              setIsThinking(false);
+              const replyText = msg.text || "";
+              
+              const triggerMatch = replyText.match(/```json_ui_trigger\n([\s\S]*?)(?:```|`|$)/);
+              if (triggerMatch && triggerMatch[1]) {
+                try {
+                  const trigger = JSON.parse(triggerMatch[1]);
+                  handleUITrigger(trigger);
+                } catch (e) { console.error("Failed to parse universal UI trigger:", e); }
+              }
+
+              const cleanText = replyText.replace(/```json_ui_trigger\n[\s\S]*?(?:```|`|$)/, '').trim();
+              if (cleanText) {
+                setMessages(p => [...p, {
+                  id: Date.now(),
+                  from: msg.from || 'wuhsu', 
+                  name: 'Wuhsu Master', 
+                  time: now(),
+                  text: cleanText
+                }]);
+              }
+            } else if (msg.type === 'AWARD_XP') {
+                // Dynamic XP update from back-end watcher
+                const { skill, xp } = msg;
+                setSkills(prev => prev.map(s => {
+                    if (s.name.toLowerCase().includes(skill.toLowerCase()) || 
+                        skill.toLowerCase().includes(s.name.toLowerCase())) {
+                        const newPct = Math.min(100, s.pct + Math.round(xp / 5));
+                        return { ...s, pct: newPct, level: newPct > 80 ? 'expert' : newPct > 50 ? 'good' : '' };
+                    }
+                    return s;
+                }));
+            }
+          } catch (e) { console.error(e); }
+        };
+        
+        return () => chatWs.close();
+      }, [handleUITrigger]);
+
+      // -- Terminal connection status --
+      const [termStatus, setTermStatus] = useState('connecting');
+
+      // -- Multi-terminal Session Handlers --
+      const spawnTerminal = useCallback((termId) => {
+          const container = document.getElementById(`container-${termId}`);
+          if (!container || container._init) return;
+
+          const term = new Terminal({
+            theme: {
+              background: 'transparent', foreground: '#C9D1D9', cursor: '#4ADE80',
+              cursorAccent: '#070A0F', selectionBackground: 'rgba(74, 222, 128, 0.15)',
+              black: '#0D1117', red: '#FF5F56', green: '#4ADE80', yellow: '#FFBD2E',
+              blue: '#58A6FF', magenta: '#A78BFA', cyan: '#22D3EE', white: '#C9D1D9',
+              brightBlack: '#484F58', brightRed: '#FF7B72', brightGreen: '#7EE787', brightYellow: '#FBBF24',
+            },
+            fontFamily: "'JetBrains Mono', monospace", fontSize: 13, lineHeight: 1.5,
+            cursorBlink: true, cursorStyle: 'bar',
+          });
+
+          const fitAddon = new FitAddon.FitAddon();
+          term.loadAddon(fitAddon);
+          term.open(container);
+          // Ensure fit and focus after xterm has rendered
+          requestAnimationFrame(() => {
+              fitAddon.fit();
+              term.focus();
+          });
+
+          const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+          const ws = new WebSocket(`${wsProto}//${window.location.host}/ws/terminal?token=${SESSION_TOKEN}&term_id=${termId}`);
+
+          ws.onopen = () => {
+             term.writeln('\x1b[32m[*] Connected to WUHSU LAB Gateway...\x1b[0m');
+             if (term.cols && term.rows) {
+                 ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+             }
+          };
+          ws.onmessage = (e) => term.write(e.data);
+
+          // ── Assist to Type Logic ──
+          let aiBuffer = '';
+          let isAiMode = false;
+
+          term.onData(data => {
+            // AI Trigger: Ctrl+Space (usually \x00) OR '?' if at start of line
+            // For now, let's stick to Ctrl+Space for precision
+            if (data === '\x00' && !isAiMode) {
+              isAiMode = true;
+              aiBuffer = '';
+              term.write('\r\n\x1b[35m[WUHSU ASSIST] What command do you need? \x1b[0m'); 
+              return;
+            }
+            
+            if (isAiMode) {
+               if (data === '\r') { // Enter
+                 isAiMode = false;
+                 term.write('\r\n\x1b[35m[WUHSU] Generating command...\x1b[0m\r\n');
+                 fetch('/api/generate-command', {
+                    method: 'POST',
+                    headers:{'Content-Type': 'application/json'},
+                    body: JSON.stringify({intent: aiBuffer})
+                 })
+                 .then(r => r.json())
+                 .then(d => {
+                    const cmd = d.command;
+                    term.write('\r\x1b[K'); // Clear line
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                       ws.send(cmd + '\n'); // Append newline for execution
+                    }
+                 });
+                 return;
+               } else if (data === '\u007F') { // Backspace
+                 if (aiBuffer.length > 0) {
+                   aiBuffer = aiBuffer.slice(0, -1);
+                   term.write('\b \b');
+                 } else {
+                   isAiMode = false;
+                   term.write('\r\n\x1b[33m[WUHSU] Assist Cancelled.\x1b[0m\r\n');
+                 }
+                 return;
+               } else {
+                 aiBuffer += data;
+                 term.write(`\x1b[35m${data}\x1b[0m`);
+                 return;
+               }
+            }
+
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(data);
+            }
+          });
+
+          // Click to focus
+          container.addEventListener('mousedown', () => {
+              term.focus();
+          });
+
+          const resizeObs = new ResizeObserver(() => {
+            fitAddon.fit();
+            if (ws && ws.readyState === WebSocket.OPEN) {
+               ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+            }
+          });
+          resizeObs.observe(container);
+
+          container._init = true;
+          xtermInstances.current[termId] = { term, fitAddon };
+      }, []);
+
+      const addNewTerminal = () => {
+          const newId = `term-${Date.now()}`;
+          setTerminals(prev => [...prev, { id: newId, name: `bash@kali:${prev.length + 1}` }]);
+          setActiveTermId(newId);
+      };
+
+      useEffect(() => {
+          terminals.forEach(t => spawnTerminal(t.id));
+      }, [terminals, spawnTerminal]);
+
+      useEffect(() => {
+          const instance = xtermInstances.current[activeTermId];
+          if (instance) {
+              setTimeout(() => {
+                  instance.fitAddon.fit();
+                  instance.term.focus();
+              }, 100);
+          }
+      }, [activeTermId]);
+
+      // -- Universal UI Trigger Handler --
+      const handleUITrigger = useCallback((payload) => {
+        if (!payload || payload.action !== 'UI_UPDATE') return;
+
+        // 1. Handle Panel Routing
+        if (payload.panel === 'YOUTUBE') {
+          if (payload.loading) {
+            setIsSearchingVideo(true);
+            setSandboxMode('YOUTUBE');
+            setYoutubeUrl(''); // Clear old video
+            setActiveFocus('sandbox');
+          } else if (payload.url) {
+            setIsSearchingVideo(false);
+            setYoutubeUrl(payload.url);
+            setSandboxMode('YOUTUBE');
+            setActiveFocus('sandbox');
+          }
+        }
+        else if (payload.panel === '3D') {
+          setSandboxMode('3D');
+          setActiveFocus('sandbox');
+          if (window.handle3DTrigger) {
+            window.handle3DTrigger(payload);
+          }
+        }
+
+        else if (payload.panel === 'DASHBOARD') {
+          // Update skills XP from Manager Agent
+          if (payload.skill && payload.xp) {
+            setSkills(prev => prev.map(s => {
+              if (s.name.toLowerCase().includes(payload.skill.toLowerCase()) ||
+                  payload.skill.toLowerCase().includes(s.name.toLowerCase())) {
+                const newPct = Math.min(100, s.pct + Math.round(payload.xp / 10));
+                return { ...s, pct: newPct, level: newPct > 80 ? 'expert' : newPct > 50 ? 'good' : '' };
+              }
+              return s;
+            }));
+          }
+          setChatTab('dash');
+          setActiveFocus('chat');
+        }
+      }, []);
+
+      // Register universal handler for internal and external calls
+      useEffect(() => {
+        window.handleUITrigger = handleUITrigger;
+      }, [handleUITrigger]);
+
+      // -- Three.js init (graceful fallback if WebGL unavailable) --
+      useEffect(() => {
+        if (canvasRef.current && !canvasRef.current._init) {
+          try {
+            initThree(canvasRef.current);
+            canvasRef.current._init = true;
+          } catch (e) {
+            console.warn('[WUHSU LAB] WebGL unavailable, skipping 3D visualization:', e.message);
+          }
+        }
+      }, []);
+
+      // -- Chat auto-scroll --
+      useEffect(() => {
+        const msgElems = document.querySelectorAll('.chat-messages .msg');
+        if (msgElems.length > 0) {
+          const lastMsg = msgElems[msgElems.length - 1];
+          if (lastMsg.classList.contains('wuhsu') && !isThinking) {
+            // Scroll the top of Wuhsu's message into view, so no manual scrolling up is needed
+            lastMsg.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          } else {
+            chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+          }
+        }
+      }, [messages, isThinking]);
+
+      // -- Resizer logic --
+      useEffect(() => {
+        const resizer = resizerRef.current;
+        const workspace = workspaceRef.current;
+        if (!resizer || !workspace) return;
+
+        let dragging = false;
+        const onDown = (e) => { dragging = true; e.preventDefault(); document.body.style.cursor = 'col-resize'; document.body.style.userSelect = 'none'; };
+        const onMove = (e) => {
+          if (!dragging) return;
+          const rect = workspace.getBoundingClientRect();
+          const pct = ((e.clientX - rect.left) / rect.width) * 100;
+          if (pct > 30 && pct < 80) setLeftWidth(pct);
+        };
+        const onUp = () => { dragging = false; document.body.style.cursor = ''; document.body.style.userSelect = ''; };
+
+        resizer.addEventListener('mousedown', onDown);
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+        return () => {
+          resizer.removeEventListener('mousedown', onDown);
+          window.removeEventListener('mousemove', onMove);
+          window.removeEventListener('mouseup', onUp);
+        };
+      }, []);
+
+      const sendMessage = useCallback(() => {
+        const text = inputVal.trim();
+        if (!text || isThinking) return;
+
+        setMessages(p => [...p, { id: Date.now(), from: 'user', name: 'You', time: now(), text }]);
+        setInputVal('');
+        setIsThinking(true);
+        setActiveFocus('chat');
+
+        if (wsChatRef.current && wsChatRef.current.readyState === WebSocket.OPEN) {
+          const payload = JSON.stringify({ 
+            query: text, 
+            term_id: activeTermId,
+            session_id: WUHSU_SESSION_ID 
+          });
+          wsChatRef.current.send(payload);
+        } else {
+          setIsThinking(false);
+          setMessages(p => [...p, { id: Date.now() + 1, from: 'wuhsu', name: 'Wuhsu Master', time: now(), text: 'Connection error — WS not open. 🛡️' }]);
+        }
+      }, [inputVal, activeTermId, isThinking]);
+
+      const handleKey = (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+      };
+
+      const formatUptime = (s) => {
+        const m = Math.floor(s / 60).toString().padStart(2, '0');
+        const sec = (s % 60).toString().padStart(2, '0');
+        return `${m}:${sec}`;
+      };
+
+      // -- YouTube Downloader Trigger --
+      const handleVideoDownload = async () => {
+          setIsDownloading(true);
+          addToast('info', '📥 Initiating secure video download...');
+          
+          try {
+              const res = await fetch('/api/download-video', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ url: youtubeUrl })
+              });
+              const data = await res.json();
+              
+              if(data.status !== 'success') {
+                  addToast('warn', 'Download failed to start.');
+              } else {
+                  addToast('agent', 'Download queued in background.');
+              }
+              
+              // Reset button state after a few seconds
+              setTimeout(() => setIsDownloading(false), 3000);
+          } catch (err) {
+              addToast('warn', 'Server error. Is the backend running?');
+              setIsDownloading(false);
+          }
+      };
+
+      // File upload handlers
+      const handleFileUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        setRagUploading(true);
+        const formData = new FormData();
+        formData.append('file', file);
+        try {
+          const response = await fetch('/api/upload-rag', { method: 'POST', body: formData });
+          const data = await response.json();
+          if (data.status === 'success') {
+            const reply = { 
+              id: Date.now(), 
+              from: 'wuhsu', 
+              name: 'Wuhsu Master', 
+              time: now(), 
+              text: `📚 I have successfully memorized \`${file.name}\`. My neural network now has full context of this document.\n\n**Would you like me to generate a deep-dive NotebookLLM-style explanation of this material?**\n\nType: *"Explain the core concepts of this document."*` 
+            };
+            setMessages(p => [...p, reply]);
+            setInputVal(`Please explain the core concepts of ${file.name} and break down the most important techniques it covers.`);
+          } else {
+            setMessages(p => [...p, { id: Date.now(), from: 'wuhsu', name: 'Wuhsu Master', time: now(), text: `❌ Upload failed: ${data.message}` }]);
+          }
+        } catch (err) {
+          setMessages(p => [...p, { id: Date.now(), from: 'wuhsu', name: 'Wuhsu Master', time: now(), text: '❌ Upload failed — could not reach the server.' }]);
+        } finally {
+          setRagUploading(false);
+          e.target.value = '';
+        }
+      };
+
+      const handleAvatarUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const formData = new FormData();
+        formData.append('file', file);
+        try {
+          const response = await fetch('/api/upload-avatar', { method: 'POST', body: formData });
+          const data = await response.json();
+          if (data.status === 'success') {
+            setAvatarUrl(data.avatar_url);
+          }
+        } catch (err) {
+          console.error('Avatar upload failed', err);
+        }
+      };
+
+      return (
+        <div className="app-shell">
+
+          {/* ═══ TITLEBAR ═══ */}
+          <div className="titlebar">
+            <div className="titlebar-left">
+              <img src="/avatars/ksm-logo.jpeg" alt="WUHSU" style={{ width: '22px', height: '22px', borderRadius: '6px', objectFit: 'cover', filter: 'drop-shadow(0 0 6px rgba(74, 222, 128, 0.4))' }} />
+              <span className="app-title">WUHSU LAB</span>
+              <span className="app-subtitle">Agentic Cybersecurity Learning Environment</span>
+            </div>
+            <div className="titlebar-right">
+              <span className="agent-count">5 AGENTS</span>
+              <div className="status-dot"></div>
+              <span>System Online</span>
+            </div>
+          </div>
+
+          {/* ═══ WORKSPACE ═══ */}
+          <div className="workspace" ref={workspaceRef}>
+
+            {/* LEFT: TERMINAL */}
+            <div 
+              className={`panel terminal-panel ${activeFocus === 'terminal' ? 'focused-panel' : ''}`} 
+              style={{ width: `${leftWidth}%`, flexShrink: 0, display: 'flex', flexDirection: 'column' }}
+              onClickCapture={() => setActiveFocus('terminal')}
+              onFocusCapture={() => setActiveFocus('terminal')}
+            >
+              <div className="panel-header">
+                <div className="panel-header-left">
+                  <div className="window-controls">
+                    <div className="mac-dot r"></div><div className="mac-dot y"></div><div className="mac-dot g"></div>
+                  </div>
+                  <span className="panel-title">AGENTIC TERMINAL</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflowX: 'auto', flex: 1, paddingLeft: '16px' }}>
+                  {terminals.map(term => (
+                      <button 
+                          key={term.id}
+                          className={`ptab ${activeTermId === term.id ? 'active' : ''}`}
+                          onClick={() => setActiveTermId(term.id)}
+                      >
+                          {term.name}
+                      </button>
+                  ))}
+                  <button className="ptab" title="New Session" onClick={addNewTerminal} style={{ fontWeight: 'bold' }}>+</button>
+                </div>
+              </div>
+              
+              <div className="terminal-wrapper" style={{ flex: 1, position: 'relative', background: 'transparent' }}>
+                  {terminals.map(term => (
+                      <div 
+                          key={term.id} 
+                          id={`container-${term.id}`} 
+                          style={{
+                              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                              display: activeTermId === term.id ? 'block' : 'none'
+                          }} 
+                      />
+                  ))}
+              </div>
+            </div>
+
+            {/* RESIZER */}
+            <div className="resizer" ref={resizerRef}></div>
+
+            {/* RIGHT COLUMN */}
+            <div className="right-col" style={{ flex: 1 }}>
+
+              {/* SANDBOX */}
+              {/* SANDBOX */}
+              <div 
+                className={`panel ${activeFocus === 'sandbox' ? 'focused-panel' : ''}`} 
+                style={{ height: '42%', position: 'relative', display: 'flex', flexDirection: 'column' }}
+                onClickCapture={() => setActiveFocus('sandbox')}
+                onFocusCapture={() => setActiveFocus('sandbox')}
+              >
+                <div className="panel-header" style={{ position: 'relative', zIndex: 5 }}>
+                  <div className="panel-header-left">
+                    <div className="window-controls">
+                      <div className="mac-dot r"></div><div className="mac-dot y"></div><div className="mac-dot g"></div>
+                    </div>
+                    <span className="panel-title">TACTICAL SANDBOX</span>
+                  </div>
+                  <div className="panel-tabs" style={{ display: 'flex', gap: '4px' }}>
+                    <button className={`ptab ${sandboxMode === 'YOUTUBE' ? 'active' : ''}`} onClick={() => setSandboxMode('YOUTUBE')}>YOUTUBE</button>
+                    <button className={`ptab ${sandboxMode === '3D' ? 'active' : ''}`} onClick={() => setSandboxMode('3D')}>TACTICAL VIZ</button>
+                  </div>
+                </div>
+                
+                <div className="sandbox-body" style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'stretch', justifyContent: 'stretch' }}>
+                  
+                  {/* 3D Visualizer (Always mounted, but hidden when in YouTube mode) */}
+                  <canvas 
+                    ref={canvasRef} 
+                    id="three-canvas" 
+                    style={{ 
+                      display: sandboxMode === '3D' ? 'block' : 'none',
+                      position: 'absolute', inset: 0, width: '100%', height: '100%',
+                      zIndex: 1
+                    }} 
+                  />
+
+                  {/* YouTube Player */}
+                  {sandboxMode === 'YOUTUBE' && !isSearchingVideo && youtubeUrl && (
+                    <div className="youtube-container" style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', padding: '10px', zIndex: 2 }}>
+                      <iframe 
+                        key={youtubeUrl}
+                        className="youtube-iframe" 
+                        src={youtubeUrl} 
+                        style={{ flex: 1, borderRadius: '8px', border: '1px solid var(--border-color)', background: '#000' }}
+                        title="YouTube" 
+                        frameBorder="0" 
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen></iframe>
+                        
+                      <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-input)', padding: '6px 12px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                        <div><span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>SOURCE: </span><span style={{ fontSize: '11px', color: 'var(--cyan)', fontWeight: 'bold' }}>YouTube Intel Agent</span></div>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button 
+                             onClick={() => {
+                               const watchUrl = youtubeUrl.replace('embed/', 'watch?v=').split('?')[0];
+                               window.open(watchUrl, '_blank');
+                             }}
+                             className="ptab" style={{ fontSize: '10px' }}>🌐 OPEN ON YOUTUBE</button>
+                          <button 
+                             onClick={handleVideoDownload} disabled={isDownloading}
+                             className="ptab active" style={{ fontSize: '10px' }}>{isDownloading ? '⏳...' : '⬇️ DOWNLOAD'}</button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Empty/Loading State for YouTube */}
+                  {sandboxMode === 'YOUTUBE' && (isSearchingVideo || !youtubeUrl) && (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', gap: '15px', color: 'var(--text-secondary)', zIndex: 3 }}>
+                      <div className="typing"><div className="dot"></div><div className="dot"></div><div className="dot"></div></div>
+                      <div style={{ fontSize: '11px', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '1.5px', color: 'var(--accent)' }}>
+                        {isSearchingVideo ? 'SCRAPING INTELLIGENCE...' : 'NO VIDEO LOADED'}
+                      </div>
+                      <div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>Waiting for mission-critical tutorial data...</div>
+                    </div>
+                  )}
+
+                  {/* Overlays for 3D Mode */}
+                  {sandboxMode === '3D' && (
+                    <div className="sandbox-overlay" style={{ pointerEvents: 'none', zIndex: 4 }}>
+                      <div className="mode-pill">TACTICAL VIZ • ACTIVE</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+
+              {/* CHAT & DASHBOARD */}
+              <div 
+                className={`panel ${activeFocus === 'chat' ? 'focused-panel' : ''}`} 
+                style={{ flex: 1 }}
+                onClickCapture={() => setActiveFocus('chat')}
+                onFocusCapture={() => setActiveFocus('chat')}
+              >
+                <div className="panel-header">
+                  <div className="panel-header-left">
+                    <div className="window-controls">
+                      <div className="mac-dot r"></div><div className="mac-dot y"></div><div className="mac-dot g"></div>
+                    </div>
+                    <span className="panel-title">WUHSU CHAT</span>
+                  </div>
+                  <div className="panel-tabs">
+                    <button className={`ptab ${chatTab === 'chat' ? 'active' : ''}`} onClick={() => setChatTab('chat')}>CHAT</button>
+                    <button className={`ptab ${chatTab === 'dash' ? 'active' : ''}`} onClick={() => setChatTab('dash')}>DASHBOARD</button>
+                  </div>
+                </div>
+
+                {chatTab === 'chat' && (
+                  <>
+                    <div className="chat-messages">
+                      {messages.map(m => (
+                        <div key={m.id} className={`msg ${m.from}`} style={{ marginBottom: '14px' }}>
+                          
+                          {/* Chat Header (Avatar + Name) */}
+                          <div className="msg-meta" style={{ marginBottom: '6px' }}>
+                            {m.from === 'wuhsu' ? (
+                                <img src="/avatars/anonymous_hacker_avatar_crime_person_mask_icon_512-Photoroom.png" alt="Wuhsu" className="wuhsu-robot-avatar" />
+                            ) : (
+                                /* Render User Avatar or Fallback to 'YOU' */
+                                userAvatar ? (
+                                    <img src={userAvatar} alt="You" style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover', border: '1px solid rgba(255,255,255,0.2)', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' }} />
+                                ) : (
+                                    <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg, #F59E0B, #E11D48)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '10px', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' }}>YOU</div>
+                                )
+                            )}
+                            <div style={{ display: 'flex', flexDirection: 'column', marginLeft: '8px' }}>
+                                <span style={{ fontWeight: '600', color: 'var(--text-primary)', fontSize: '12px', letterSpacing: '0.3px' }}>{m.from === 'wuhsu' ? 'Wuhsu Master' : userName}</span>
+                                <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>{m.time}</span>
+                            </div>
+                          </div>
+
+                          {/* Chat Bubble with Native Markdown Parsing */}
+                          <div 
+                            className="msg-text" 
+                            style={{ marginLeft: m.from === 'wuhsu' ? '38px' : '0', marginRight: m.from === 'user' ? '38px' : '0' }}
+                            dangerouslySetInnerHTML={{ 
+                                __html: m.from === 'wuhsu' 
+                                    ? marked.parse(m.text) 
+                                    : m.text // Keep user messages as plain text
+                            }}
+                          />
+                        </div>
+                      ))}
+                      {isThinking && (
+                        <div className="msg wuhsu">
+                          <div className="msg-text"><div className="typing"><div className="dot"></div><div className="dot"></div><div className="dot"></div></div></div>
+                        </div>
+                      )}
+                      <div ref={chatEndRef}></div>
+                    </div>
+
+                    <div className="chat-input-area">
+                      <div className="chat-input-row">
+                        <input type="file" ref={fileInputRef} style={{ display: 'none' }} accept=".pdf,.txt" onChange={handleFileUpload} />
+                        <button className="action-btn" onClick={() => fileInputRef.current.click()} title="Upload RAG Document" style={ragUploading ? { color: 'var(--amber)', borderColor: 'var(--amber)' } : {}}>
+                          {ragUploading ? '⏳' : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>}
+                        </button>
+                        <textarea
+                          className="chat-input"
+                          placeholder="Ask Wuhsu Master anything..."
+                          value={inputVal} onChange={e => setInputVal(e.target.value)} onKeyDown={handleKey} rows={1}
+                        />
+                        <button className="action-btn send" onClick={sendMessage}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {chatTab === 'dash' && (
+                  <div className="dashboard-view">
+                    {/* Profile Section */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '20px', padding: '12px', background: 'var(--bg-input)', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
+                      <div style={{ width: '56px', height: '56px', borderRadius: '50%', border: '2px solid var(--accent)', overflow: 'hidden', flexShrink: 0, boxShadow: '0 0 12px var(--accent-dim)' }}>
+                        {userAvatar ?
+                          <img src={userAvatar} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> :
+                          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-panel-alt)', fontSize: '22px' }}>👤</div>
+                        }
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        {isEditingProfile ? (
+                            <div style={{ display: 'flex', gap: '5px' }}>
+                                <input 
+                                    className="chat-input" 
+                                    style={{ fontSize: '11px', padding: '4px 8px' }} 
+                                    value={userName} 
+                                    onChange={e => setUserName(e.target.value)} 
+                                    autoFocus
+                                />
+                                <button className="ptab active" onClick={() => setIsEditingProfile(false)}>SAVE</button>
+                            </div>
+                        ) : (
+                            <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '13px', fontFamily: "'JetBrains Mono', monospace" }}>{userName}</h3>
+                        )}
+                        <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>WUHSU LAB Student</div>
+                        <input type="file" id="avatarUpload" style={{ display: 'none' }} accept="image/*" onChange={(e) => {
+                            const file = e.target.files[0];
+                            if (file) {
+                                const reader = new FileReader();
+                                reader.onload = (ev) => setUserAvatar(ev.target.result);
+                                reader.readAsDataURL(file);
+                            }
+                        }} />
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                            <button className="ptab" onClick={() => document.getElementById('avatarUpload').click()} style={{ marginTop: '6px', fontSize: '9px', padding: '2px 0' }}>Update Avatar</button>
+                            <button className="ptab" onClick={() => setIsEditingProfile(true)} style={{ marginTop: '6px', fontSize: '9px', padding: '2px 0' }}>Edit Name</button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                        <div className="dash-header" style={{ margin: 0 }}>⬡ Learning Progress — Skill Tree</div>
+                        <button className="ptab active" onClick={() => {
+                            setMessages(p => [...p, { id: Date.now(), from: 'user', name: 'You', time: now(), text: 'Draft a social post about my progress today.' }]);
+                            if (wsChatRef.current?.readyState === WebSocket.OPEN) {
+                                wsChatRef.current.send(JSON.stringify({ query: 'Draft a social media post based on my current terminal session and skills.', term_id: activeTermId }));
+                                setIsThinking(true);
+                                setChatTab('chat');
+                            }
+                        }} style={{ fontSize: '10px' }}>DRAFT SOCIAL POST</button>
+                    </div>
+
+                    {skills.map(s => (
+                      <div className="skill-item" key={s.name}>
+                        <div className="skill-top">
+                          <span>{s.name}</span>
+                          <span style={{ color: s.pct > 80 ? 'var(--accent)' : s.pct > 50 ? 'var(--amber)' : 'inherit' }}>{s.pct}%</span>
+                        </div>
+                        <div className="skill-bar">
+                          <div className={`skill-fill ${s.level}`} style={{ width: `${s.pct}%` }}></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* ═══ STATUS BAR ═══ */}
+          <div className="status-bar">
+            <div className="status-bar-left">
+              <div className="sb-item">
+                <div className="sb-dot"></div>
+                <span className="sb-label">STATUS</span>
+                <span className="sb-value green">OPERATIONAL</span>
+              </div>
+              <div className="sb-item">
+                <span className="sb-label">CPU</span>
+                <span className="sb-value">12%</span>
+              </div>
+              <div className="sb-item">
+                <span className="sb-label">MEM</span>
+                <span className="sb-value">2.1 GB</span>
+              </div>
+              <div className="sb-item">
+                <span className="sb-label">AGENTS</span>
+                <span className="sb-value green">5/5</span>
+              </div>
+            </div>
+            <div className="status-bar-right">
+              <div className="sb-item">
+                <span className="sb-label">UPTIME</span>
+                <span className="sb-value">{formatUptime(uptime)}</span>
+              </div>
+              <div className="sb-item">
+                <span className="sb-label">LLM</span>
+                <span className="sb-value">Ollama/MiniMax</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+  {% endraw %}
+</body>
+
+</html>

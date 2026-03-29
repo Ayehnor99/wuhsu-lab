@@ -1,0 +1,5 @@
+js: You are using the in-browser Babel transformer. Be sure to precompile your scripts for production - https://babeljs.io/docs/setup/
+js: THREE.WebGLRenderer: Error creating WebGL context.
+js: [Rabbi] WebGL unavailable, skipping 3D visualization: Error creating WebGL context.
+qt.qpa.theme.gnome: dbus reply error: [ "org.freedesktop.DBus.Error.NoReply" ] "Did not receive a reply. Possible causes include: the remote application did not send a reply, the message bus security policy blocked the reply, the reply timeout expired, or the network connection was broken."
+qt.qpa.theme.gnome: dbus reply error: [ "org.freedesktop.DBus.Error.NoReply" ] "Did not receive a reply. Possible causes include: the remote application did not send a reply, the message bus security policy blocked the reply, the reply timeout expired, or the network connection was broken."

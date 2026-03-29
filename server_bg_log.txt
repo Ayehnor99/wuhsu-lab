@@ -1,0 +1,21 @@
+/home/btc-lord/Desktop/Rabbi/venv/lib/python3.13/site-packages/requests/__init__.py:113: RequestsDependencyWarning: urllib3 (2.6.3) or chardet (7.2.0)/charset_normalizer (3.4.6) doesn't match a supported version!
+  warnings.warn(
+INFO:     Started server process [67972]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+========================================================
+  WUHSU LAB — Agentic Cybersecurity Gateway (Hardened)
+  Platform: Linux/Kali
+  Bind:     127.0.0.1:8000 (localhost only)
+  Token:    nc5piG1_EJOS4py5UDgMoB9QlByY9xqbxA_3NRr3rgo
+  Routes:   ['/openapi.json', '/docs', '/docs/oauth2-redirect', '/redoc', '/avatars', '/static', '/', '/debug', '/api/chat', '/api/generate-command', '/api/upload-avatar', '/api/upload-rag', '/ws/chat', '/ws/terminal']
+========================================================
+INFO:     127.0.0.1:59078 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59090 - "WebSocket /ws/terminal?token=SOL2Zs6HXk35DauI_RxwIb6E0um9peKhBY3ogckE0MQ" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [67972]

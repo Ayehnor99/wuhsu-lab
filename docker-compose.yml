@@ -1,0 +1,32 @@
+# Replace docker-compose.yml with this secure version
+version: '3.8'
+
+services:
+  wuhsu-lab:
+    build: .
+    container_name: wuhsu-lab-core
+    network_mode: host 
+    shm_size: '1gb' # Still needed for large terminal buffer parsing
+    
+    environment:
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-https://cloud.ollama.com}
+      - FIRECRAWL_API_KEY=${FIRECRAWL_API_KEY:-}
+    
+    volumes:
+      - .wuhsu_history.db:/app/.wuhsu_history.db
+      - .wuhsu_vector_db:/app/.wuhsu_vector_db
+      - ./avatars:/app/avatars
+      - ./downloads:/app/downloads
+      - /usr/share/wordlists:/usr/share/wordlists:ro
+
+    restart: unless-stopped
+    
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+      nproc: 65535
+
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
