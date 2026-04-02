@@ -32,3 +32,6 @@ __pycache__/
 # OS Generated Files
 .DS_Store
 Thumbs.db
+
+# Wuhsu Lab Workspaces
+workspace/

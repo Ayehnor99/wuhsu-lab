@@ -5,7 +5,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Content-Security-Policy"
-    content="default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://unpkg.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' ws://127.0.0.1:8000 wss://127.0.0.1:8000 ws://localhost:8000 wss://localhost:8000 https://cdn.jsdelivr.net https://unpkg.com; img-src 'self' data: https://i.ytimg.com; frame-src https://www.youtube.com;">
+    content="default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://unpkg.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' ws://127.0.0.1:8000 wss://127.0.0.1:8000 ws://localhost:8000 wss://localhost:8000 https://cdn.jsdelivr.net https://unpkg.com stun:stun.l.google.com:19302; img-src 'self' data: https://i.ytimg.com; frame-src https://www.youtube.com;">
   <title>WUHSU LAB — Agentic Cybersecurity Environment</title>
 
   <!-- Session token (injected by FastAPI/Jinja2 on every page load) -->
@@ -40,6 +40,9 @@
 
   <!-- Marked.js for parsing LLM Markdown -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+  <!-- Monaco Editor Loader -->
+  <script src="/static/vs/loader.js"></script>
 
   {% raw %}
   <style>
@@ -588,8 +591,12 @@
       background: var(--user-bubble);
       color: #FFFFFF;
       border: 1px solid rgba(255, 255, 255, 0.15);
-      border-radius: 16px 16px 4px 16px; /* Smooth chat bubble tail */
+      border-radius: 16px 16px 4px 16px;
       box-shadow: 0 4px 12px rgba(10, 132, 255, 0.2);
+      
+      /* 🌟 THE FIX: Forces HTML to render \n as actual line breaks 🌟 */
+      white-space: pre-wrap; 
+      word-wrap: break-word;
       align-self: flex-end;
     }
 
@@ -1514,22 +1521,52 @@
           }
       }, [chatTab]);
       const [youtubeUrl, setYoutubeUrl] = useState('');
-      const [sandboxMode, setSandboxMode] = useState('3D'); // '3D' or 'YOUTUBE'
+      const [sandboxMode, setSandboxMode] = useState('YOUTUBE'); // Default to YOUTUBE now that 3D is hidden
       const [isSearchingVideo, setIsSearchingVideo] = useState(false);
+
+      // ── WebRTC & Screen Share State ──
+      const [coopRoom, setCoopRoom] = useState('');
+      const [coopRole, setCoopRole] = useState('');
+      const [coopToken, setCoopToken] = useState('');
+      const [isCamActive, setIsCamActive] = useState(true);
+
+      const localScreenRef = useRef(null);
+      const remoteScreenRef = useRef(null);
+      const remoteCamRef = useRef(null);
+      const peerConnRef = useRef(null);
+      const sigWsRef = useRef(null);
+      const localStreamRef = useRef(null); // Holds the WebCam
 
 
       // Profile & Dashboard state
       const [userName, setUserName] = useState('CyberSec Apprentice');
       const [userAvatar, setUserAvatar] = useState(null);
       const [isEditingProfile, setIsEditingProfile] = useState(false);
-      const [skills, setSkills] = useState([
-        { name: 'Network Reconnaissance', pct: 45, level: 'good' },
-        { name: 'Web Exploitation', pct: 30, level: '' },
-        { name: 'Social Engineering', pct: 65, level: 'good' },
-        { name: 'Cryptography', pct: 20, level: '' },
-        { name: 'Post-Exploitation', pct: 15, level: '' },
-        { name: 'Reporting & Documentation', pct: 10, level: '' },
-      ]);
+      // 1. Start with an empty, real state instead of fake data
+      const [skills, setSkills] = useState([]);
+
+      // 2. Fetch the real database skills when the app loads
+      useEffect(() => {
+          fetch('/api/skills')
+              .then(res => res.json())
+              .then(data => {
+                  if (data.status === 'success' && data.skills) {
+                      // Dynamically calculate Levels and Progress Bar Percentages
+                      const formattedSkills = data.skills.map(s => {
+                          const currentLevel = Math.floor(s.xp / 100) + 1;
+                          const progressPct = s.xp % 100; // e.g., 145 XP = Level 2, 45% to next level
+                          
+                          let rankClass = '';
+                          if (currentLevel >= 3) rankClass = 'expert'; // Cyan/Gold gradient
+                          else if (currentLevel === 2) rankClass = 'good'; // Green/Gold gradient
+                          
+                          return { name: s.name, xp: s.xp, pct: progressPct, level: rankClass, numericLevel: currentLevel };
+                      });
+                      setSkills(formattedSkills);
+                  }
+              })
+              .catch(err => console.error("Failed to load skills from DB", err));
+      }, []);
 
       // RAG upload state
       const [ragUploading, setRagUploading] = useState(false);
@@ -1561,8 +1598,48 @@
       const [activeTermId, setActiveTermId] = useState('term-1');
       const xtermInstances = useRef({});
 
+      // --- Editor State ---
+      const [leftTab, setLeftTab] = useState('terminal'); // 'terminal' or 'editor'
+      const [editorFilename, setEditorFilename] = useState('exploit.py');
+      const [editorContent, setEditorContent] = useState("# Write your Python exploit here...\n\nimport os\n\nprint('Wuhsu Lab is active!')");
+      const editorContainerRef = useRef(null);
+      const monacoEditorRef = useRef(null);
+
       // -- Background animation --
       useEffect(() => { initBackground(); }, []);
+
+      // -- Initialize Monaco Editor when tab is switched --
+      useEffect(() => {
+          if (leftTab === 'editor' && editorContainerRef.current) {
+              // Destroy previous instance if container was re-mounted
+              if (monacoEditorRef.current) {
+                  monacoEditorRef.current.dispose();
+                  monacoEditorRef.current = null;
+              }
+              require.config({ paths: { 'vs': '/static/vs' }});
+              
+              require(['vs/editor/editor.main'], function () {
+                  if (!editorContainerRef.current) return;
+                  monacoEditorRef.current = monaco.editor.create(editorContainerRef.current, {
+                      value: editorContent,
+                      language: 'python',
+                      theme: 'vs-dark',
+                      automaticLayout: true,
+                      minimap: { enabled: false },
+                      fontSize: 13,
+                      fontFamily: "'JetBrains Mono', monospace",
+                      scrollbar: { vertical: 'hidden' }
+                  });
+
+                  monacoEditorRef.current.onDidChangeModelContent(() => {
+                      setEditorContent(monacoEditorRef.current.getValue());
+                  });
+                  
+                  // Force focus on the editor
+                  setTimeout(() => monacoEditorRef.current && monacoEditorRef.current.focus(), 100);
+              });
+          }
+      }, [leftTab]);
 
       // -- Uptime --
       useEffect(() => {
@@ -1726,7 +1803,7 @@
           resizeObs.observe(container);
 
           container._init = true;
-          xtermInstances.current[termId] = { term, fitAddon };
+          xtermInstances.current[termId] = { term, fitAddon, ws };
       }, []);
 
       const addNewTerminal = () => {
@@ -1891,6 +1968,58 @@
         return `${m}:${sec}`;
       };
 
+      // -- Toast Notification Helper --
+      const addToast = useCallback((type, text) => {
+          const icon = type === 'error' ? '❌' : type === 'warn' ? '⚠️' : type === 'agent' ? '🛡️' : 'ℹ️';
+          setMessages(p => [...p, {
+              id: Date.now(),
+              from: 'wuhsu',
+              name: 'Wuhsu Master',
+              time: now(),
+              text: `${icon} ${text}`
+          }]);
+      }, []);
+
+      // -- Deploy & Run (Save to workspace + auto-execute in terminal) --
+      const handleDeployAndRun = async () => {
+          const currentCode = monacoEditorRef.current ? monacoEditorRef.current.getValue() : editorContent;
+          
+          addToast('info', '📝 Saving script to workspace...');
+          
+          try {
+              const res = await fetch('/api/save-file', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ filename: editorFilename, content: currentCode })
+              });
+              const data = await res.json();
+              
+              if (data.status === 'success') {
+                  addToast('agent', `✅ Script deployed: ${data.filepath}`);
+                  
+                  // 1. Switch back to Terminal
+                  setLeftTab('terminal');
+                  setActiveFocus('terminal');
+                  
+                  // 2. Auto-execute in the active terminal
+                  setTimeout(() => {
+                      const instance = xtermInstances.current[activeTermId];
+                      if (instance && instance.ws && instance.ws.readyState === WebSocket.OPEN) {
+                          const cmd = `python3 ${data.filepath}\n`;
+                          instance.ws.send(cmd);
+                          addToast('agent', `Running: python3 ${data.filepath}`);
+                      } else {
+                          addToast('warn', 'Terminal WebSocket not available. Run manually.');
+                      }
+                  }, 300);
+              } else {
+                  addToast('warn', `Failed to save: ${data.message}`);
+              }
+          } catch (err) {
+              addToast('error', 'Server error. Could not save file.');
+          }
+      };
+
       // -- YouTube Downloader Trigger --
       const handleVideoDownload = async () => {
           setIsDownloading(true);
@@ -1916,6 +2045,117 @@
               addToast('warn', 'Server error. Is the backend running?');
               setIsDownloading(false);
           }
+      };
+
+      // -- WebRTC Screen Share Functions --
+      const toggleCamera = () => {
+          if (localStreamRef.current) {
+              const videoTrack = localStreamRef.current.getVideoTracks()[0];
+              if (videoTrack) {
+                  videoTrack.enabled = !videoTrack.enabled;
+                  setIsCamActive(videoTrack.enabled);
+              }
+          }
+      };
+
+      // 1. Host Starts the Screen Share
+      const startCoOpDojo = async () => {
+          try {
+              // A. Ask user to share their screen
+              const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+              // B. Ask user for their webcam
+              const camStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+              
+              localStreamRef.current = camStream;
+
+              // C. Call our REST API to create a secure room
+              const res = await fetch('/screen/rooms', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ presenter_id: WUHSU_SESSION_ID, title: "Wuhsu Hack Session" })
+              });
+              const roomData = await res.json();
+              
+              setCoopRoom(roomData.room_id);
+              setCoopToken(roomData.invite_token);
+              setCoopRole('presenter');
+              setSandboxMode('COOP');
+              addToast('agent', 'Screen Share Active! Give your ally the Invite Token.');
+
+              // D. Connect to Signaling WebSocket
+              const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+              const sigWs = new WebSocket(`${wsProto}//${window.location.host}/ws/screen/${roomData.room_id}?role=presenter&user_id=${WUHSU_SESSION_ID}`);
+              sigWsRef.current = sigWs;
+
+              // E. Create WebRTC Peer Connection
+              const pc = new RTCPeerConnection({ iceServers: roomData.ice_servers });
+              peerConnRef.current = pc;
+
+              // Add BOTH tracks (Screen + Cam) to the connection
+              screenStream.getTracks().forEach(track => pc.addTrack(track, screenStream));
+              camStream.getTracks().forEach(track => pc.addTrack(track, camStream));
+
+              // F. Signaling Logic
+              pc.onicecandidate = (event) => {
+                  if (event.candidate) {
+                      sigWs.send(JSON.stringify({ type: 'webrtc_ice', candidate: event.candidate.toJSON(), target_viewer_id: 'guest' }));
+                  }
+              };
+
+              sigWs.onmessage = async (e) => {
+                  const msg = JSON.parse(e.data);
+                  if (msg.type === 'viewer_joined') {
+                      const offer = await pc.createOffer();
+                      await pc.setLocalDescription(offer);
+                      sigWs.send(JSON.stringify({ type: 'webrtc_offer', sdp: offer, target_viewer_id: msg.viewer_id }));
+                  } else if (msg.type === 'webrtc_answer') {
+                      await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+                  } else if (msg.type === 'webrtc_ice') {
+                      await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+                  }
+              };
+          } catch (err) {
+              addToast('error', 'Screen share or camera access denied.');
+          }
+      };
+
+      // 2. Guest Joins the Screen Share
+      const joinCoOpDojo = async (roomId, token) => {
+          setCoopRoom(roomId);
+          setCoopRole('viewer');
+          setSandboxMode('COOP');
+
+          const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+          const sigWs = new WebSocket(`${wsProto}//${window.location.host}/ws/screen/${roomId}?role=viewer&token=${token}&user_id=${WUHSU_SESSION_ID}`);
+          sigWsRef.current = sigWs;
+
+          const pc = new RTCPeerConnection({ iceServers:[{ urls: "stun:stun.l.google.com:19302" }] });
+          peerConnRef.current = pc;
+
+          // When tracks arrive from the Host (Screen + Cam)
+          pc.ontrack = (event) => {
+              if (!remoteScreenRef.current.srcObject) {
+                  remoteScreenRef.current.srcObject = event.streams[0];
+              } else if (event.streams[1] && !remoteCamRef.current.srcObject) {
+                  remoteCamRef.current.srcObject = event.streams[1];
+              }
+          };
+
+          pc.onicecandidate = (event) => {
+              if (event.candidate) sigWs.send(JSON.stringify({ type: 'webrtc_ice', candidate: event.candidate.toJSON() }));
+          };
+
+          sigWs.onmessage = async (e) => {
+              const msg = JSON.parse(e.data);
+              if (msg.type === 'webrtc_offer') {
+                  await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+                  const answer = await pc.createAnswer();
+                  await pc.setLocalDescription(answer);
+                  sigWs.send(JSON.stringify({ type: 'webrtc_answer', sdp: answer }));
+              } else if (msg.type === 'webrtc_ice') {
+                  await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+              }
+          };
       };
 
       // File upload handlers
@@ -1985,52 +2225,69 @@
           {/* ═══ WORKSPACE ═══ */}
           <div className="workspace" ref={workspaceRef}>
 
-            {/* LEFT: TERMINAL */}
+            {/* LEFT: TERMINAL & EDITOR */}
             <div 
               className={`panel terminal-panel ${activeFocus === 'terminal' ? 'focused-panel' : ''}`} 
               style={{ width: `${leftWidth}%`, flexShrink: 0, display: 'flex', flexDirection: 'column' }}
-              onClickCapture={() => setActiveFocus('terminal')}
-              onFocusCapture={() => setActiveFocus('terminal')}
+              onClickCapture={() => { if (leftTab === 'terminal') setActiveFocus('terminal'); }}
+              onFocusCapture={() => { if (leftTab === 'terminal') setActiveFocus('terminal'); }}
             >
               <div className="panel-header">
                 <div className="panel-header-left">
                   <div className="window-controls">
                     <div className="mac-dot r"></div><div className="mac-dot y"></div><div className="mac-dot g"></div>
                   </div>
-                  <span className="panel-title">AGENTIC TERMINAL</span>
+                  {/* Left Panel Main Tabs */}
+                  <div style={{ marginLeft: '10px', display: 'flex', gap: '4px' }}>
+                      <button className={`ptab ${leftTab === 'terminal' ? 'active' : ''}`} onClick={() => setLeftTab('terminal')}>TERMINAL</button>
+                      <button className={`ptab ${leftTab === 'editor' ? 'active' : ''}`} onClick={() => setLeftTab('editor')}>CODE EDITOR</button>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflowX: 'auto', flex: 1, paddingLeft: '16px' }}>
-                  {terminals.map((term, idx) => (
-                      <div 
-                          key={term.id}
-                          className={`ptab ${activeTermId === term.id ? 'active' : ''}`}
-                          style={{ display: 'flex', alignItems: 'center' }}
-                      >
-                          <button 
-                              style={{ background: 'transparent', border: 'none', color: 'inherit', fontFamily: 'inherit', fontSize: 'inherit', padding: 0, cursor: 'pointer' }}
-                              onClick={() => setActiveTermId(term.id)}
+                
+                {/* Terminal Sub-Tabs (Only show when Terminal is active) */}
+                {leftTab === 'terminal' && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflowX: 'auto', flex: 1, paddingLeft: '16px', justifyContent: 'flex-end' }}>
+                      {terminals.map((term, idx) => (
+                          <div 
+                              key={term.id}
+                              className={`ptab ${activeTermId === term.id ? 'active' : ''}`}
+                              style={{ display: 'flex', alignItems: 'center' }}
                           >
-                              {term.name}
-                          </button>
-                          {idx > 0 && (
-                              <button
-                                  title="Close Session"
-                                  style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 0, marginLeft: '8px', display: 'flex', alignItems: 'center' }}
-                                  onClick={(e) => {
-                                      e.stopPropagation();
-                                      removeTerminal(term.id);
-                                  }}
+                              <button 
+                                  style={{ background: 'transparent', border: 'none', color: 'inherit', fontFamily: 'inherit', fontSize: 'inherit', padding: 0, cursor: 'pointer' }}
+                                  onClick={() => setActiveTermId(term.id)}
                               >
-                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                  {term.name}
                               </button>
-                          )}
-                      </div>
-                  ))}
-                  <button className="ptab" title="New Session" onClick={addNewTerminal} style={{ fontWeight: 'bold' }}>+</button>
-                </div>
+                              {idx > 0 && (
+                                  <button
+                                      title="Close Session"
+                                      style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 0, marginLeft: '8px', display: 'flex', alignItems: 'center' }}
+                                      onClick={(e) => {
+                                          e.stopPropagation();
+                                          removeTerminal(term.id);
+                                      }}
+                                  >
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                  </button>
+                              )}
+                          </div>
+                      ))}
+                      <button className="ptab" title="New Session" onClick={addNewTerminal} style={{ fontWeight: 'bold' }}>+</button>
+                    </div>
+                )}
+                
+                {/* Editor Sub-Tabs (Only show when Editor is active) */}
+                {leftTab === 'editor' && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, justifyContent: 'flex-end' }}>
+                        <input type="text" value={editorFilename} onChange={(e) => setEditorFilename(e.target.value)} style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', width: '120px', fontFamily: "'JetBrains Mono', monospace" }} />
+                        <button className="action-btn send" onClick={handleDeployAndRun} style={{ fontSize: '10px', padding: '0 12px', width: 'auto', fontWeight: 'bold' }}>🚀 DEPLOY & RUN</button>
+                    </div>
+                )}
               </div>
               
-              <div className="terminal-wrapper" style={{ flex: 1, position: 'relative', background: 'transparent' }}>
+              {/* Body: Terminal Containers */}
+              <div style={{ flex: 1, position: 'relative', background: 'transparent', display: leftTab === 'terminal' ? 'flex' : 'none', flexDirection: 'column', padding: '12px 14px', overflow: 'hidden', minHeight: 0, minWidth: 0 }}>
                   {terminals.map(term => (
                       <div 
                           key={term.id} 
@@ -2042,6 +2299,13 @@
                       />
                   ))}
               </div>
+              
+              {/* Body: Monaco Editor Container */}
+              {leftTab === 'editor' && (
+                  <div style={{ flex: 1, position: 'relative', background: '#1E1E1E', overflow: 'hidden', minHeight: 0 }}>
+                      <div ref={editorContainerRef} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}></div>
+                  </div>
+              )}
             </div>
 
             {/* RESIZER */}
@@ -2067,7 +2331,7 @@
                   </div>
                   <div className="panel-tabs" style={{ display: 'flex', gap: '4px' }}>
                     <button className={`ptab ${sandboxMode === 'YOUTUBE' ? 'active' : ''}`} onClick={() => setSandboxMode('YOUTUBE')}>YOUTUBE</button>
-                    <button className={`ptab ${sandboxMode === '3D' ? 'active' : ''}`} onClick={() => setSandboxMode('3D')}>TACTICAL VIZ</button>
+                    <button className={`ptab ${sandboxMode === 'COOP' ? 'active' : ''}`} onClick={() => setSandboxMode('COOP')}>CO-OP DOJO</button>
                   </div>
                 </div>
                 
@@ -2131,6 +2395,86 @@
                       <div className="mode-pill">TACTICAL VIZ • ACTIVE</div>
                     </div>
                   )}
+
+                  {/* Cinematic Co-Op View */}
+                  {sandboxMode === 'COOP' && (
+                    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', background: '#000', zIndex: 5 }}>
+                        
+                        {/* Header Controls */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 14px', background: 'var(--bg-panel-alt)', borderBottom: '1px solid var(--border-color)', backdropFilter: 'blur(20px)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <div className="status-dot"></div>
+                                <span style={{ fontSize: '11px', color: 'var(--accent)', fontWeight: 'bold', letterSpacing: '1px' }}>LIVE INTELLIGENCE FEED</span>
+                            </div>
+                            {coopRole === 'presenter' && (
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <button className="action-btn" onClick={toggleCamera} style={{ color: isCamActive ? 'var(--accent)' : 'var(--dot-red)' }}>
+                                        {isCamActive ? '📷 CAM ON' : '📷 HIDDEN'}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Video Canvas */}
+                        <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+                            {coopRole ? (
+                                <>
+                                    {/* 1. The BIG Shared Screen (Fills the background) */}
+                                    <video 
+                                        ref={remoteScreenRef} 
+                                        autoPlay 
+                                        playsInline 
+                                        muted={coopRole === 'presenter'}
+                                        style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#070A0F' }} 
+                                    />
+
+                                    {/* 2. The SMALL PiP Webcam (Floating Glass Panel) */}
+                                    <div style={{ 
+                                        position: 'absolute', bottom: '20px', right: '20px', 
+                                        width: '160px', height: '120px', 
+                                        borderRadius: '14px', border: '1px solid rgba(255,255,255,0.2)', 
+                                        overflow: 'hidden', boxShadow: '0 16px 40px rgba(0,0,0,0.6)',
+                                        background: 'rgba(20,22,30,0.8)', backdropFilter: 'blur(10px)'
+                                    }}>
+                                        {isCamActive ? (
+                                            <video 
+                                                ref={remoteCamRef} 
+                                                autoPlay 
+                                                playsInline 
+                                                muted={coopRole === 'presenter'}
+                                                style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                                            />
+                                        ) : (
+                                            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--dot-red)', fontSize: '11px', fontWeight: 'bold', letterSpacing: '1px' }}>CAM SECURED</div>
+                                        )}
+                                    </div>
+                                </>
+                            ) : (
+                                /* Lobby / Connection Screen */
+                                <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '20px', background: 'var(--bg-base)' }}>
+                                    <div className="aurora-text" style={{ fontSize: '18px' }}>P2P TACTICAL LINK</div>
+                                    <div style={{ display: 'flex', gap: '16px' }}>
+                                        <button className="action-btn send" style={{ padding: '8px 24px', width: 'auto', fontWeight: 'bold' }} onClick={startCoOpDojo}>BROADCAST SCREEN</button>
+                                        <button className="action-btn" style={{ padding: '8px 24px', width: 'auto' }} onClick={() => { 
+                                            const id = prompt("Enter Room ID:"); 
+                                            const tkn = prompt("Enter JWT Token:"); 
+                                            if(id && tkn) joinCoOpDojo(id, tkn); 
+                                        }}>JOIN FEED</button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        
+                        {/* Security Footer */}
+                        {coopRole === 'presenter' && (
+                            <div style={{ padding: '10px', textAlign: 'center', fontSize: '11px', color: 'var(--text-muted)', background: 'var(--bg-panel-alt)' }}>
+                                ROOM: <code style={{ color: 'var(--cyan)' }}>{coopRoom}</code> | 
+                                TOKEN: <code style={{ color: 'var(--accent)' }}>{coopToken.substring(0, 15)}...</code>
+                                <br/><span style={{ fontSize: '9px', marginTop: '4px', display: 'inline-block' }}>End-to-End Encrypted. Read-Only Terminal enforcement active.</span>
+                            </div>
+                        )}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -2179,16 +2523,24 @@
                             </div>
                           </div>
 
-                          {/* Chat Bubble with Native Markdown Parsing */}
+                          {/* Chat Bubble with Line-Break Fix */}
                           <div 
                             className="msg-text" 
-                            style={{ marginLeft: m.from === 'wuhsu' ? '38px' : '0', marginRight: m.from === 'user' ? '38px' : '0' }}
-                            dangerouslySetInnerHTML={{ 
-                                __html: m.from === 'wuhsu' 
-                                    ? marked.parse(m.text) 
-                                    : m.text // Keep user messages as plain text
+                            style={{ 
+                                marginLeft: m.from === 'wuhsu' ? '38px' : '0', 
+                                marginRight: m.from === 'user' ? '38px' : '0' 
                             }}
-                          />
+                          >
+                             {m.from === 'wuhsu' ? (
+                                 /* Parse AI Markdown with breaks: true */
+                                 <div dangerouslySetInnerHTML={{ 
+                                     __html: marked.parse(m.text, { breaks: true }) 
+                                 }} />
+                             ) : (
+                                 /* Native rendering for User text (CSS pre-wrap handles the newlines) */
+                                 m.text
+                             )}
+                          </div>
                         </div>
                       ))}
                       {isThinking && (
@@ -2274,14 +2626,27 @@
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
                         <div className="dash-header" style={{ margin: 0 }}>⬡ Learning Progress — Skill Tree</div>
+                        
+                        {/* 🌟 THE SOCIAL MEDIA ENGINE BUTTON 🌟 */}
                         <button className="ptab active" onClick={() => {
-                            setMessages(p => [...p, { id: Date.now(), from: 'user', name: 'You', time: now(), text: 'Draft a social post about my progress today.' }]);
+                            const socialPrompt = "Analyze my current terminal session. I want to share my progress with my professional network. Please write a highly engaging, professional LinkedIn post summarizing the cybersecurity concepts or tools I just used. Include a catchy hook, 3 bullet points of what I learned, and relevant infosec hashtags. Do not include any sensitive IP addresses or passwords.";
+                            
+                            // 1. Show the prompt in the user's chat window
+                            setMessages(p => [...p, { id: Date.now(), from: 'user', name: userName, time: now(), text: "Draft a social post about my progress today." }]);
+                            
+                            // 2. Send the secret, highly-detailed prompt to the backend
                             if (wsChatRef.current?.readyState === WebSocket.OPEN) {
-                                wsChatRef.current.send(JSON.stringify({ query: 'Draft a social media post based on my current terminal session and skills.', term_id: activeTermId }));
+                                wsChatRef.current.send(JSON.stringify({ 
+                                    query: socialPrompt, 
+                                    term_id: activeTermId,
+                                    session_id: WUHSU_SESSION_ID
+                                }));
                                 setIsThinking(true);
-                                setChatTab('chat');
+                                setChatTab('chat'); // Instantly flip to chat so they can watch it type!
                             }
-                        }} style={{ fontSize: '10px' }}>DRAFT SOCIAL POST</button>
+                        }} style={{ fontSize: '10px', background: 'linear-gradient(90deg, #0A84FF, #5E5CE6)', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(94, 92, 230, 0.4)' }}>
+                            🚀 DRAFT SOCIAL POST
+                        </button>
                     </div>
 
                     {skills.map(s => (

@@ -86,17 +86,20 @@ OUTPUT FORMAT:
 # 3. THREAT MITIGATION: STRUCTURED OUTPUT
 # ==========================================
 class WuhsuDecision(BaseModel):
-    response: Any = Field(description="WuhsuMaster's conversational reply to the user. Can be a string or a structured object.")
+    internal_thought: str = Field(
+        description="Analyze the terminal context and user query. Does the user need a video tutorial? Is there an unknown error or CVE that requires a web search? Think step-by-step."
+    )
     route: str = Field(
         description="Strict routing: Must be 'CHAT', 'WEBCRAWLER', 'YOUTUBE_AGENT', or 'MANAGER_AGENT'."
     )
+    response: Any = Field(description="WuhsuMaster's conversational reply or search query parameters.")
     ui_trigger: Optional[str] = Field(
         default=None,
-        description="If routing to 3D, put animation name (e.g. 'TCP'). If YouTube, put search query. Otherwise null.",
+        description="If routing to 3D, put animation name. If YouTube or Web, put the search query. Otherwise null.",
     )
     xp_award: Optional[XpAward] = Field(
         default=None,
-        description="Optional XP award if the user performed a successful or educational action."
+        description="Optional XP award if the user performed a successful action."
     )
 
 
@@ -108,18 +111,49 @@ class WuhsuService:
 
     @classmethod
     async def init_db(cls):
-        """Initializes the local SQLite database. Data never leaves the Kali machine."""
+        """Initializes local SQLite databases for Chat History AND User Skills."""
         async with aiosqlite.connect(cls.DB_PATH) as db:
+            # 1. Chat History Table
             await db.execute(
                 """CREATE TABLE IF NOT EXISTS chatbot_logs
                    (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    session_id TEXT,
-                    query TEXT,
-                    response TEXT,
-                    status TEXT,
+                    session_id TEXT, query TEXT, response TEXT, status TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"""
             )
+            # 2. 🌟 NEW: User Skills Table (Persistent XP Tracking)
+            await db.execute(
+                """CREATE TABLE IF NOT EXISTS user_skills
+                   (skill_name TEXT UNIQUE, xp INTEGER DEFAULT 0)"""
+            )
             await db.commit()
+
+    @classmethod
+    async def add_xp(cls, skill_name: str, amount: int):
+        """Adds XP to a specific skill, creating it if it doesn't exist."""
+        try:
+            async with aiosqlite.connect(cls.DB_PATH) as db:
+                await db.execute(
+                    """INSERT INTO user_skills (skill_name, xp) 
+                       VALUES (?, ?) 
+                       ON CONFLICT(skill_name) DO UPDATE SET xp = xp + ?""",
+                    (skill_name, amount, amount)
+                )
+                await db.commit()
+        except Exception as e:
+            logging.error(f"Failed to save XP to DB: {e}")
+
+    @classmethod
+    async def get_skills(cls) -> List[Dict[str, Any]]:
+        """Retrieves all user skills and XP for the React Dashboard."""
+        try:
+            async with aiosqlite.connect(cls.DB_PATH) as db:
+                db.row_factory = aiosqlite.Row
+                cursor = await db.execute("SELECT skill_name, xp FROM user_skills ORDER BY xp DESC")
+                rows = await cursor.fetchall()
+                return [{"name": row["skill_name"], "xp": row["xp"]} for row in rows]
+        except Exception as e:
+            logging.error(f"Failed to fetch skills: {e}")
+            return []
 
     @classmethod
     async def process_query(
@@ -162,21 +196,17 @@ YOUR NEW DIRECTIVES FOR THIS RESPONSE:
             # Technical system prompt for the ROUTER
             router_system_prompt = (
                 f"CURRENT DATE: {time.strftime('%Y-%m-%d')}\n"
-                "You are the Wuhsu Routing Engine. Your task is to analyze the user query and terminal context.\n"
+                "You are the Wuhsu Routing Engine. Your task is to analyze the user query and the LIVE TERMINAL CONTEXT.\n"
                 f"[LIVE TERMINAL CONTEXT]:\n{terminal_context}\n"
                 "INSTRUCTIONS:\n"
-                "1. Output a JSON object with 'route', 'response', 'ui_trigger', and 'xp_award'.\n"
-                "2. 'route' must be one of: CHAT, WEBCRAWLER, YOUTUBE_AGENT, or MANAGER_AGENT.\n"
+                "1. Use 'internal_thought' to analyze the terminal output BEFORE deciding the route.\n"
+                "2. Output a JSON object with 'internal_thought', 'route', 'response', 'ui_trigger', and 'xp_award'.\n"
                 "\n"
-                "ROUTING RULES (FOLLOW STRICTLY):\n"
-                "- YOUTUBE_AGENT: If the user asks to 'show a video', 'find a tutorial', 'show me videos on', 'watch', 'youtube', or anything requesting video content. ALWAYS use this route for video requests. Set ui_trigger to the search topic.\n"
-                "- WEBCRAWLER: If the user asks to 'search the web', 'look up', 'find information online', or wants OSINT/web data.\n"
-                "- MANAGER_AGENT: If the user asks about their progress, XP, skills, or dashboard stats.\n"
-                "- CHAT: For all other conversational queries, explanations, terminal analysis, and general mentoring.\n"
-                "\n"
-                "3. If the user is just chatting, use 'response' for a brief clinical reply, but the CHAT route will generate the final version.\n"
-                "4. If you decide to answer directly, your 'response' will be used as a fallback.\n"
-                "5. XP_AWARD should only be given for successful technical milestones seen in the terminal."
+                "AUTONOMOUS ROUTING RULES (BE PROACTIVE!):\n"
+                "- WEBCRAWLER: Do NOT wait for the user to say 'search'. If the terminal shows an unfamiliar Error Code, a specific CVE, a new software version, or an exploit failure, AUTONOMOUSLY route to WEBCRAWLER. Set 'ui_trigger' to the search query. Also use this if the user asks for news, current events, latest CVEs, or asks to 'search', 'crawl', 'fetch', or 'look up' something on the internet/web.\n"
+                "- YOUTUBE_AGENT: Do NOT wait for the user to ask for a video. If the terminal shows the user repeatedly failing to use a complex tool (e.g., Hashcat, Metasploit, Nmap), AUTONOMOUSLY route to YOUTUBE_AGENT to give them a tutorial. Set 'ui_trigger' to the tool name. Also use this for video or tutorial requests.\n"
+                "- MANAGER_AGENT: If the user explicitly asks about their progress, XP, or dashboard stats.\n"
+                "- CHAT: If you know the answer directly, or if the user is just conversing. ALWAYS provide the NEXT BASH COMMAND they should run.\n"
             )
 
             messages = [SystemMessage(content=router_system_prompt + rag_injection)]
@@ -191,7 +221,13 @@ YOUR NEW DIRECTIVES FOR THIS RESPONSE:
                             "youtube", "watch video", "show me a tutorial", "find a tutorial",
                             "search youtube", "search video", "video on ", "videos on ",
                             "tutorial on ", "tutorials on "]
-            _web_keywords = ["search the web", "look up online", "osint", "crawl ", "scrape "]
+            
+            # 🌟 THE FIX: Expanded Web/OSINT trigger keywords
+            _web_keywords =[
+                "search the web", "look up online", "osint", "crawl", "scrape",
+                "fetch", "news", "what is going on", "what is happening",
+                "latest", "today", "search online", "hackernoon", "cve"
+            ]
             
             pre_route = None
             for kw in _yt_keywords:
@@ -259,8 +295,20 @@ YOUR NEW DIRECTIVES FOR THIS RESPONSE:
             elif final_route == "CHAT":
                 chat_instruction = (
                     f"CURRENT DATE: {time.strftime('%Y-%m-%d')}\n"
-                    f"{WUHSU_SYSTEM_PROMPT}\n"
+                    "You are Wuhsu Master, an elite, highly empathetic cybersecurity AI mentor.\n"
+                    "You have LIVE ACCESS to the user's terminal below.\n"
+                    "1. If there is an error, explain it simply using an analogy.\n"
+                    "2. YOU MUST ALWAYS SUGGEST THE NEXT COMMAND. End your message with: 'Try running this next: `[exact bash command]`'.\n"
+                    "3. Use beautiful Markdown and wrap all commands in backticks."
                 )
+                
+                if "[SYSTEM AUTO-TRIGGER]" in query:
+                    chat_instruction = (
+                        "You are the Wuhsu Guardian. Analyze the terminal output automatically. "
+                        "IF terminal output is normal and expected, reply ONLY with 'NO_RESPONSE'. "
+                        "IF there is an error, a security vulnerability found, or an obvious next step, provide a 2-sentence explanation and the exact NEXT COMMAND to run in backticks."
+                    )
+                    
                 chat_msgs = [SystemMessage(content=chat_instruction + rag_injection)]
                 for h in history:
                     chat_msgs.append(HumanMessage(content=h["query"]))

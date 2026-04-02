@@ -29,6 +29,7 @@ os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
 from PySide6.QtCore import QUrl, Qt
 from PySide6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget
 from PySide6.QtWebEngineWidgets import QWebEngineView
+from PySide6.QtWebEngineCore import QWebEnginePage
 from PySide6.QtGui import QIcon
 
 # ─── Constants ───
@@ -141,6 +142,9 @@ class WuhsuDesktopApp(QMainWindow):
 
         # --- 3. Initialize the Chromium WebEngine ---
         self.browser = QWebEngineView()
+        
+        # Auto-grant WebRTC Camera/Microphone permissions
+        self.browser.page().featurePermissionRequested.connect(self.on_feature_permission_requested)
 
         # --- 4. Load the UI entry point (FastAPI Server) ---
         server_url = QUrl(_SERVER_URL)
@@ -148,6 +152,25 @@ class WuhsuDesktopApp(QMainWindow):
 
         # --- 5. Finalize Layout ---
         layout.addWidget(self.browser)
+
+    def on_feature_permission_requested(self, security_origin: QUrl, feature: QWebEnginePage.Feature):
+        """Auto-grant WebRTC media permissions (camera/mic)."""
+        if feature in (
+            QWebEnginePage.Feature.MediaAudioCapture,
+            QWebEnginePage.Feature.MediaVideoCapture,
+            QWebEnginePage.Feature.MediaAudioVideoCapture,
+        ):
+            self.browser.page().setFeaturePermission(
+                security_origin,
+                feature,
+                QWebEnginePage.PermissionPolicy.PermissionGrantedByUser
+            )
+        else:
+            self.browser.page().setFeaturePermission(
+                security_origin,
+                feature,
+                QWebEnginePage.PermissionPolicy.PermissionDeniedByUser
+            )
 
     def closeEvent(self, event):
         """Ensure the server subprocess is cleaned up on window close."""

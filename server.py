@@ -91,6 +91,70 @@ manager = ConnectionManager()
 
 
 # ═══════════════════════════════════════
+# 0.6 Co-Op Dojo Room Manager (WebRTC Signaling)
+# ═══════════════════════════════════════
+class DojoRoomManager:
+    """Manages WebRTC signaling rooms for Co-Op video calling and secure terminal mirroring.
+    
+    SECURITY: Guest peers are NEVER allowed to send terminal_input messages.
+    Terminal mirroring is strictly one-way (host stdout → guest, read-only).
+    """
+    def __init__(self):
+        # Maps room_code -> {"host": WebSocket, "guest": WebSocket}
+        self.rooms = {}
+
+    async def handle_signaling(self, websocket: WebSocket, room_id: str, role: str):
+        global active_coop_room_id
+        
+        await websocket.accept()
+        
+        if room_id not in self.rooms:
+            self.rooms[room_id] = {"host": None, "guest": None}
+            
+        self.rooms[room_id][role] = websocket
+        
+        # Link the terminal mirror to the host's active room
+        if role == "host":
+            active_coop_room_id = room_id
+            
+        audit_logger.info(f"👥 [Co-Op] {role} joined room {room_id}")
+
+        try:
+            while True:
+                data = await websocket.receive_text()
+                payload = json.loads(data)
+                
+                target_role = "guest" if role == "host" else "host"
+                target_ws = self.rooms[room_id].get(target_role)
+
+                # SECURITY: If Guest tries to send terminal INPUT, drop it immediately.
+                if role == "guest" and payload.get("type") == "terminal_input":
+                    audit_logger.warning(f"🚨 [SECURITY] Guest in room {room_id} attempted to send keystrokes. Blocked.")
+                    continue 
+
+                # Route signaling (SDP offers/ICE) and Host Terminal Output to the peer
+                if target_ws:
+                    await target_ws.send_text(data)
+                    
+        except WebSocketDisconnect:
+            self.rooms[room_id][role] = None
+            if role == "host":
+                active_coop_room_id = None
+            audit_logger.info(f"👥 [Co-Op] {role} left room {room_id}")
+
+dojo_manager = DojoRoomManager()
+
+# Track which room the host terminal is broadcasting to
+active_coop_room_id = None
+
+@app.websocket("/ws/multiplayer/{room_id}")
+async def multiplayer_socket(websocket: WebSocket, room_id: str, role: str = Query(...)):
+    """Handles WebRTC signaling and Secure Terminal Mirroring."""
+    await dojo_manager.handle_signaling(websocket, room_id, role)
+
+
+
+# ═══════════════════════════════════════
 # 1. Serve the UI (with token injection)
 # ═══════════════════════════════════════
 @app.get("/", response_class=HTMLResponse)
@@ -284,6 +348,12 @@ async def api_dashboard_stats():
         
     return {"interactions": total_interactions}
 
+@app.get("/api/skills")
+async def get_user_skills():
+    """Endpoint for the React UI to fetch real skill progress on load."""
+    skills = await WuhsuService.get_skills()
+    return {"status": "success", "skills": skills}
+
 # ─── YouTube Intelligence API ───
 @app.get("/api/search-youtube")
 async def api_search_youtube(q: str = Query(...)):
@@ -414,6 +484,23 @@ async def chat_socket(websocket: WebSocket, token: str = Query(...)):
                     
                     # 4. If there's a UI trigger in the final chunk, send it
                     if update.get("final"):
+                        # Check for XP awards from the Wuhsu Master
+                        xp = update.get("xp_award")
+                        if xp:
+                            skill_name = xp.get("skill")
+                            amount = xp.get("amount")
+                            
+                            # 🌟 1. Save it permanently to the database
+                            await WuhsuService.add_xp(skill_name, amount)
+                            
+                            # 🌟 2. Broadcast the live update to the UI
+                            await manager.broadcast(json.dumps({
+                                "type": "AWARD_XP",
+                                "skill": skill_name,
+                                "xp": amount,
+                                "reason": xp.get("reason")
+                            }))
+
                         if update.get("ui_trigger") and update.get("route") not in ["YOUTUBE_AGENT", "WEBCRAWLER"]:
                             ui_payload = json.dumps({
                                 "action": "UI_UPDATE",
@@ -613,6 +700,16 @@ else:
                         except Exception:
                             break
                         
+                        # 🌟 Co-Op: Broadcast Read-Only terminal mirror to All Peers in Room
+                        if active_coop_room_id and active_coop_room_id in dojo_manager.rooms:
+                            room = dojo_manager.rooms[active_coop_room_id]
+                            for peer_role, peer_ws in room.items():
+                                if peer_ws:
+                                    try:
+                                        await peer_ws.send_text(json.dumps({"type": "terminal_mirror", "data": text_data}))
+                                    except Exception:
+                                        pass  # Peer disconnected, non-critical
+
                         # --- Proactive Watcher ---
                         current_time = time.time()
                         
@@ -716,7 +813,64 @@ else:
 
 
 # ═══════════════════════════════════════
-# 3. Launch the Gateway (localhost only)
+# 3.5 MONACO EDITOR — Secure File I/O
+# ═══════════════════════════════════════
+WORKSPACE_DIR = os.path.join(_base_dir, "workspace")
+os.makedirs(WORKSPACE_DIR, exist_ok=True)
+
+class SaveFileRequest(BaseModel):
+    filename: str
+    content: str
+
+@app.post("/api/save-file")
+async def save_workspace_file(req: SaveFileRequest):
+    """Securely saves a script to the local Kali workspace."""
+    try:
+        # SECURITY: Strip paths to prevent Directory Traversal (e.g., ../../etc/passwd)
+        safe_filename = os.path.basename(req.filename)
+        if not safe_filename:
+            return {"status": "error", "message": "Invalid filename."}
+
+        file_path = os.path.join(WORKSPACE_DIR, safe_filename)
+
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(req.content)
+
+        audit_logger.info(f"📝 [Editor] Saved script to {file_path}")
+
+        return {
+            "status": "success",
+            "message": f"Saved {safe_filename}",
+            "filepath": f"workspace/{safe_filename}"
+        }
+    except Exception as e:
+        audit_logger.error(f"❌ [Editor] Failed to save file: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+# ═══════════════════════════════════════
+# 4. WEBRTC SCREEN SHARE INTEGRATION
+# ═══════════════════════════════════════
+from screen_share_server import router as screen_router, screen_share_websocket
+
+# Mount the REST endpoints (POST /screen/rooms)
+app.include_router(screen_router)
+
+# Mount the WebRTC Signaling WebSocket
+@app.websocket("/ws/screen/{room_id}")
+async def screen_ws_endpoint(
+    websocket: WebSocket,
+    room_id: str,
+    role: str = Query("viewer"),
+    token: str = Query(""),
+    user_id: str = Query("anonymous"),
+    display_name: str = Query("Guest"),
+):
+    await screen_share_websocket(websocket, room_id, role, token, user_id, display_name)
+
+
+# ═══════════════════════════════════════
+# 5. Launch the Gateway (localhost only)
 # ═══════════════════════════════════════
 if __name__ == "__main__":
     print("=" * 56)
