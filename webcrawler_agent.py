@@ -61,6 +61,51 @@ def firecrawl_scrape_url(url: str) -> str:
         logging.error(f"🔥 Firecrawl Error: {e}")
         return f"Crawl failed: {str(e)}"
 
+def firecrawl_search_web(query: str) -> str:
+    """Uses Firecrawl to search the web for OSINT intelligence."""
+    from wuhsu_common import quick_ddg_search
+    try:
+        if not firecrawl_app:
+            logging.warning("🔥 Firecrawl app not initialized. Falling back to DuckDuckGo.")
+            return quick_ddg_search(query)
+            
+        logging.info(f"🔥 [WebCrawler] Firecrawl searching for: {query}")
+        
+        search_result = firecrawl_app.search(query)
+        if not search_result:
+            logging.warning("🔥 Firecrawl returned no results. Falling back to DuckDuckGo.")
+            return quick_ddg_search(query)
+            
+        # Parse Pydantic SearchData object or dictionary
+        if hasattr(search_result, "model_dump"):
+            data = search_result.model_dump()
+        elif hasattr(search_result, "dict"):
+            data = search_result.dict()
+        elif isinstance(search_result, dict):
+            data = search_result
+        else:
+            data = {}
+            
+        web_results = data.get("web") or data.get("data") or []
+        
+        if not web_results or not isinstance(web_results, list):
+            logging.warning("🔥 Firecrawl returned no web results. Falling back to DuckDuckGo.")
+            return quick_ddg_search(query)
+            
+        formatted_results = f"--- FIRECRAWL SEARCH RESULTS FOR: {query} ---\n\n"
+        for idx, result in enumerate(web_results[:5]):
+            title = result.get('title', 'Unknown Title')
+            url = result.get('url', 'Unknown URL')
+            description = result.get('description', 'No description available.')
+            formatted_results += f"### {idx+1}. {title}\n**URL:** {url}\n**Summary:** {description}\n\n"
+            
+        return formatted_results
+        
+    except Exception as e:
+        logging.error(f"🔥 Firecrawl Search Error: {e}")
+        return quick_ddg_search(query)
+
+
 # ==========================================
 # 2. INTENT PARSING (PYDANTIC)
 # ==========================================
@@ -104,9 +149,8 @@ async def webcrawler_node(state: WuhsuState):
         # Run synchronous scrape in separate thread
         raw_data = await asyncio.to_thread(firecrawl_scrape_url, decision.query_or_url)
     else:
-        # 🔥 DuckDuckGo Search Fallback
-        from wuhsu_common import quick_ddg_search 
-        raw_data = await asyncio.to_thread(quick_ddg_search, decision.query_or_url)
+        # 🔥 FIRECRAWL SEARCH
+        raw_data = await asyncio.to_thread(firecrawl_search_web, decision.query_or_url)
         
     summary_prompt = SystemMessage(content=f"""
     You are the OSINT WebCrawler Agent. You just pulled the following raw data from the internet:
