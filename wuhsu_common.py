@@ -16,6 +16,7 @@ from pathlib import Path
 # ─── Load Environment ─────────────────────────────────────────────────────────
 _BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(_BASE_DIR / ".venv" / ".env")
+load_dotenv(_BASE_DIR / ".env")
 
 # ─── Shared State ────────────────────────────────────────────────────────────
 class WuhsuState(TypedDict):

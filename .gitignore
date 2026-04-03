@@ -16,6 +16,8 @@ env/
 # User Generated Content
 avatars/*
 !avatars/.gitkeep
+!avatars/ksm-logo.jpeg
+!avatars/anonymous_hacker_avatar_crime_person_mask_icon_512-Photoroom.png
 downloads/*
 !downloads/.gitkeep
 

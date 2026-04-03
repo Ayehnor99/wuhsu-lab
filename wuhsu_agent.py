@@ -38,6 +38,7 @@ from rag_service import RAGService
 # Load .env from the .venv directory (project-specific location)
 _BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(_BASE_DIR / ".venv" / ".env")
+load_dotenv(_BASE_DIR / ".env")
 
 # Import the shared LLM and State from wuhsu_common to prevent circular imports
 from wuhsu_common import WuhsuState, llm as common_llm
