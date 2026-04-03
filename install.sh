@@ -17,18 +17,27 @@ mkdir -p "$DESKTOP_DIR"
 
 # 2. Copy Files to Application Directory
 echo "[*] Copying files to $APP_DIR..."
-rsync -a --exclude 'wuhsu-env' --exclude '.git' --exclude '__pycache__' ./ "$APP_DIR/"
+rsync -a --exclude 'wuhsu-env' --exclude '.venv' --exclude '.git' --exclude '__pycache__' ./ "$APP_DIR/"
 
 # 3. Create Virtual Environment
 echo "[*] Setting up Python Virtual Environment..."
 cd "$APP_DIR"
-python3 -m venv wuhsu-env
-source wuhsu-env/bin/activate
+if ! python3 -m venv .venv; then
+    echo -e "\033[91m❌ Error: Failed to create virtual environment.\033[0m"
+    echo "Tip: On Kali Linux, you may need to install the venv package first:"
+    echo -e "\033[93msudo apt update && sudo apt install -y python3-venv\033[0m"
+    exit 1
+fi
+source .venv/bin/activate
 
 # 4. Install Dependencies
 echo "[*] Installing Python dependencies (this may take a minute)..."
-pip install --upgrade pip > /dev/null 2>&1
-pip install -r requirements.txt > /dev/null 2>&1
+echo "[*] Logs are being saved to $APP_DIR/install.log"
+pip install --upgrade pip > "$APP_DIR/install.log" 2>&1
+if ! pip install -r requirements.txt >> "$APP_DIR/install.log" 2>&1; then
+    echo -e "\033[91m❌ Error: Failed to install Python dependencies. Check $APP_DIR/install.log for details.\033[0m"
+    exit 1
+fi
 
 # Create required asset folders
 mkdir -p "$APP_DIR/avatars"
@@ -44,10 +53,10 @@ APP_DIR="$HOME/.wuhsu-lab"
 
 echo "[*] Booting Wuhsu Master Gateway..."
 cd "$APP_DIR"
-source wuhsu-env/bin/activate
+source .venv/bin/activate
 
-# Start the FastAPI server in the background and hide output
-uvicorn server:app --host 127.0.0.1 --port 8000 > /dev/null 2>&1 &
+# Start the FastAPI server in the background and log output
+uvicorn server:app --host 127.0.0.1 --port 8000 > "$APP_DIR/server_output.log" 2>&1 &
 SERVER_PID=$!
 
 # Wait 2 seconds for the server to bind to the port
